@@ -61,12 +61,17 @@ function texts(node, out = []) {
   return texts(node.props?.children, out);
 }
 
-/** A finished task with thinking, an answer, a tool call, logs and usage. */
+/** Every string in the element tree, joined — substring checks read naturally. */
+function flat(node) {
+  return texts(node).join('\n');
+}
+
+/** A finished task, with an input and an output. */
 function richTask() {
   return {
     id: 'agy-1',
     status: 'done',
-    brief: 'Fix the widget',
+    brief: 'Fix the number field so 11789480 renders as 11.789.480',
     cd: 'C:/repo',
     model: 'gemini-4-argon-high',
     effort: 'high',
@@ -74,31 +79,39 @@ function richTask() {
     toolCalls: 1,
     startedAt: 1_000,
     endedAt: 4_000,
+    answer: 'Done: the formatter now groups thousands.',
     error: null,
-    result: { usage: { input_tokens: 10, output_tokens: 20, thinking_tokens: 3, cache_read_tokens: 0 } },
-    logs: ['jetski: no output produced'],
-    steps: [
-      { stepIndex: 1, stepType: 'agent_response_thinking', state: 'DONE', text: 'why', thinking: 'let me reason', deltas: 2 },
-      { stepIndex: 2, stepType: 'agent_response', state: 'DONE', text: 'Done.', thinking: '', deltas: 1 },
-      {
-        stepIndex: 3,
-        stepType: 'tool',
-        state: 'ERROR',
-        text: '',
-        thinking: '',
-        deltas: 0,
-        toolName: 'run_command',
-        tool: { name: 'run_command', parameters: { CommandLine: 'ls' }, error: { message: 'permission check failed' } },
-        durationSeconds: 1.494,
-        error: { type: 'TOOL_ERROR', message: 'permission check failed' },
-      },
-    ],
   };
 }
 
-/** Every string in the element tree, joined — substring checks read naturally. */
-function flat(node) {
-  return texts(node).join('\n');
+/** A task with nothing to show yet. */
+function bareTask() {
+  return {
+    id: 'agy-2',
+    status: 'running',
+    brief: '',
+    cd: 'C:/repo',
+    model: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    toolCalls: 0,
+    answer: '',
+    error: null,
+  };
+}
+
+/** The props every Panel/TaskList call needs. */
+function surface(overrides) {
+  return {
+    tasks: [],
+    running: 0,
+    expanded: null,
+    onToggle: () => {},
+    onKill: () => {},
+    onDismiss: () => {},
+    onClose: () => {},
+    ...overrides,
+  };
 }
 
 test('registers as a client plugin and seats the widget in shell.overlay', () => {
@@ -127,105 +140,158 @@ test('registers as a client plugin and seats the widget in shell.overlay', () =>
 });
 
 test('the collapsed pill says what is running', () => {
-  const pos = { right: 24, bottom: 96 };
-  const running = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'running', startedAt: Date.now(), endedAt: null, cd: '', brief: '', toolCalls: 0 }], running: 1, pos, onClick: () => {} }));
+  const running = flat(plugin.Pill({ ...surface({ tasks: [{ ...bareTask(), status: 'running' }], running: 1 }), onClick: () => {} }));
   assert.ok(running.includes('agy'));
   assert.ok(running.includes('1 running'));
   // The count is announced as a sentence, not a bare number.
   assert.ok(running.includes('1 of 1 agy tasks running'));
 
-  const idle = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }, { id: 'b', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }], running: 0, pos, onClick: () => {} }));
-  assert.ok(idle.includes('2 tasks'));
+  const two = flat(plugin.Pill({ ...surface({ tasks: [richTask(), richTask()], running: 0 }), onClick: () => {} }));
+  assert.ok(two.includes('2 tasks'));
+  assert.ok(two.includes('2 agy tasks, none running'));
 
-  const one = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }], running: 0, pos, onClick: () => {} }));
+  const one = flat(plugin.Pill({ ...surface({ tasks: [richTask()], running: 0 }), onClick: () => {} }));
   assert.ok(one.includes('1 task'));
 });
 
 test('the widget is always mounted, with an empty list before anything runs', () => {
-  // The widget never returns null: several delegations can be in flight, and
-  // with none the panel's empty state is still the place to look.
   const first = plugin.AgyWidget({});
   assert.notEqual(first, null);
   assert.ok(flat(first).includes('agy'));
 
-  const empty = flat(plugin.Pill({ tasks: [], running: 0, pos: { right: 24, bottom: 96 }, onClick: () => {} }));
+  const empty = flat(plugin.Pill({ ...surface(), onClick: () => {} }));
   assert.ok(empty.includes('0 tasks'));
 });
 
-test('the panel lists tasks and, when one is selected, its live transcript', () => {
+test('the drawer is docked right at full window height', () => {
+  const panel = plugin.Panel({ ...surface({ tasks: [richTask()] }) });
+  assert.equal(panel.type, 'aside', 'the drawer is a landmark, not a floating card');
+  assert.ok(String(panel.props.className).includes('agd-drawer'));
+  assert.equal(panel.props['aria-label'], 'agy delegate tasks');
+
+  // Docked: pinned to the right edge, spanning top to bottom.
+  const drawer = plugin.CSS.slice(plugin.CSS.indexOf('.agd-drawer'), plugin.CSS.indexOf('.agd-head'));
+  assert.match(drawer, /position: fixed/);
+  assert.match(drawer, /top: 0; right: 0; bottom: 0;/);
+  assert.match(drawer, /width: min\(420px, 100vw\)/);
+  // The list scrolls inside the drawer instead of growing it.
+  assert.match(plugin.CSS, /\.agd-body \{[^}]*min-height: 0/);
+  assert.match(plugin.CSS, /prefers-reduced-motion/);
+});
+
+test('a task row shows exactly status, input and output', () => {
   const task = richTask();
-  const base = {
-    tasks: [task],
-    running: 0,
-    pos: { right: 24, bottom: 96 },
-    onSelect: () => {},
-    onBackToAll: () => {},
+  const row = flat(plugin.TaskRow({ task, expanded: false, onToggle: () => {}, onKill: () => {}, onDismiss: () => {} }));
+
+  assert.ok(row.includes('agy-1'), 'the id');
+  assert.ok(row.includes('done · 3s'), 'the status in words');
+  assert.ok(row.includes('input') && row.includes('Fix the number field so 11789480 renders as 11.789.480'), 'the input');
+  assert.ok(row.includes('output') && row.includes('Done: the formatter now groups thousands.'), 'the output');
+  assert.ok(row.includes('gemini-4-argon-high · C:/repo'), 'the model and root');
+  assert.ok(row.includes('clear'), 'a finished task can be cleared');
+
+  // The wall of text the user asked to remove stays out of the widget.
+  for (const dropped of ['Thinking', 'Answer', 'Tool calls', 'agy output', 'tokens in', 'cache ']) {
+    assert.ok(!row.includes(dropped), `the widget must not render "${dropped}"`);
+  }
+});
+
+test('a row without output says so, and a running row offers stop', () => {
+  const running = flat(plugin.TaskRow({ task: bareTask(), expanded: false, onToggle: () => {}, onKill: () => {}, onDismiss: () => {} }));
+  assert.ok(running.includes('running · '), 'the status');
+  assert.ok(running.includes('(no brief)'));
+  assert.ok(running.includes('waiting for output…'));
+  assert.ok(running.includes('stop'));
+  assert.ok(!running.includes('clear'), 'a running task is not cleared away');
+
+  const failed = flat(plugin.TaskRow({
+    task: { ...richTask(), status: 'failed', error: 'permission check failed: headless mode cannot prompt' },
+    expanded: false,
+    onToggle: () => {},
     onKill: () => {},
     onDismiss: () => {},
-    onCollapse: () => {},
-    onStartDrag: () => {},
-    onNudge: () => {},
-    onResetPos: () => {},
+  }));
+  assert.ok(failed.includes('failed · 3s'));
+  assert.ok(failed.includes('permission check failed'));
+});
+
+test('the whole row is the expand control, and the action inside it does not toggle', () => {
+  const task = richTask();
+  const toggled = [];
+  const dismissed = [];
+  const row = plugin.TaskRow({
+    task,
+    expanded: false,
+    onToggle: (id) => toggled.push(id),
+    onKill: () => {},
+    onDismiss: (id) => dismissed.push(id),
+  });
+
+  assert.equal(row.props.role, 'button', 'the row itself is the control');
+  assert.equal(row.props.tabIndex, 0);
+  assert.equal(row.props['aria-expanded'], false);
+  assert.match(row.props['aria-label'], /expand the input and output/);
+
+  // Clicking the row toggles it; Enter and Space work for the keyboard.
+  row.props.onClick();
+  row.props.onKeyDown({ key: 'Enter', preventDefault: () => {} });
+  const space = { key: ' ', prevented: false, preventDefault() { this.prevented = true; } };
+  row.props.onKeyDown(space);
+  row.props.onKeyDown({ key: 'a', preventDefault: () => { throw new Error('unrelated keys must be ignored'); } });
+  assert.deepEqual(toggled, ['agy-1', 'agy-1', 'agy-1']);
+  assert.equal(space.prevented, true, 'Space must not also scroll the page');
+
+  // The expanded row flips the flag's wording and the clamp.
+  const open = plugin.TaskRow({ task, expanded: true, onToggle: () => {}, onKill: () => {}, onDismiss: () => {} });
+  assert.equal(open.props['aria-expanded'], true);
+  assert.ok(flat(open).includes('click to collapse'));
+
+  // There is no more/less button any more: the only button is the row's own action.
+  const buttons = [];
+  const walk = (node) => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (node.type === 'button') buttons.push(node);
+    if (typeof node.type === 'function') { walk(node.type(node.props)); return; }
+    walk(node.props?.children);
   };
+  walk(row);
+  assert.deepEqual(buttons.map((node) => node.props.children), ['clear'], 'a finished task offers only its clear action');
 
-  const list = flat(plugin.Panel({ ...base, selected: null, detail: null }));
-  assert.ok(list.includes('agy delegate'));
-  assert.ok(list.includes('agy-1'));
-  assert.ok(list.includes('Fix the widget'));
-  assert.ok(list.includes('gemini-4-argon-high · C:/repo'));
-  assert.ok(list.includes('1 agy task, none running'));
-
-  const detail = flat(plugin.Panel({ ...base, selected: 'agy-1', detail: task }));
-  for (const expected of ['Thinking', 'Answer', 'Tool calls', 'run_command', 'permission check failed', 'agy output', 'in 10', 'out 20', 'thinking 3', 'cache 0', '3s', 'dismiss', 'all tasks']) {
-    assert.ok(detail.includes(expected), `detail should show ${expected}`);
-  }
-  assert.ok(!detail.includes('kill'), 'a finished task offers dismiss, not kill');
+  // And that action must not bubble into the row's toggle.
+  const event = { stopped: false, stopPropagation() { this.stopped = true; } };
+  buttons[0].props.onClick(event);
+  assert.equal(event.stopped, true, 'clear must not also toggle the row');
+  assert.deepEqual(dismissed, ['agy-1']);
+  assert.deepEqual(toggled, ['agy-1', 'agy-1', 'agy-1'], 'no extra toggle from the action click');
 });
 
-test('the widget keeps itself inside the frame', () => {
-  // Regression: the panel used to grow past the viewport, pushing its header —
-  // the only drag/reset/collapse handle — off the top of the screen.
-  assert.deepEqual(plugin.clampPos({ right: 24, bottom: 96 }, 1280, 860), { right: 24, bottom: 96 });
-  assert.deepEqual(plugin.clampPos({ right: -50, bottom: 9_999 }, 1280, 860), { right: 4, bottom: 580 });
-  assert.deepEqual(plugin.clampPos({ right: 1_999, bottom: -20 }, 1280, 860), { right: 1_180, bottom: 4 });
+test('the drawer stays between the window header and the status bar', () => {
+  // Measured on the real app: a 40px drag header at the top, and a composer /
+  // status band along the bottom that the drawer must not cover.
+  const panel = plugin.Panel({ ...surface({ tasks: [richTask()] }), insetTop: 40, insetBottom: 47 });
+  assert.equal(panel.props.style.top, 40);
+  assert.equal(panel.props.style.bottom, 47);
 
-  assert.equal(plugin.panelWidth(1280), 470);
-  assert.equal(plugin.panelWidth(360), 336);
-  assert.equal(plugin.panelWidth(200), 240, 'a floor keeps the panel usable on absurd widths');
-
-  // Whatever the corner, min(70vh, 620, room above the corner) leaves the panel
-  // fully on screen.
-  assert.equal(plugin.panelMaxHeight(860, 96), 602);
-  assert.equal(plugin.panelMaxHeight(860, 580), 264);
-  assert.equal(plugin.panelMaxHeight(1_200, 40), 620);
-  for (const bottom of [4, 96, 300, 580]) {
-    const max = plugin.panelMaxHeight(860, bottom);
-    assert.ok(bottom + max <= 860, `panel fits above the corner at bottom=${bottom}`);
-  }
-
-  // The rendered panel applies both bounds.
-  const panel = plugin.Panel({ tasks: [], running: 0, pos: { right: 24, bottom: 96 }, selected: null, detail: null, onSelect: () => {}, onBackToAll: () => {}, onKill: () => {}, onDismiss: () => {}, onCollapse: () => {}, onStartDrag: () => {}, onNudge: () => {}, onResetPos: () => {} });
-  assert.equal(panel.props.style.width, 470);
-  assert.equal(panel.props.style.maxHeight, 602);
-  assert.ok(plugin.CSS.includes('min-height: 0'), 'the scrolling body must be a shrinkable flex child');
-  assert.ok(plugin.CSS.includes('max-height'), 'the panel needs its own height ceiling');
+  // The band finder: only page-wide flow bands touching the bottom edge count.
+  const band = { top: 813, bottom: 860, width: 688, height: 47 };
+  assert.equal(plugin.bottomInset(860, [band]), 47);
+  // A taller viewport with the same band hugging its bottom.
+  assert.equal(plugin.bottomInset(1000, [{ top: 953, bottom: 1000, width: 688, height: 47 }]), 47);
+  // The topmost of several bands wins, so a nested row cannot shorten the inset.
+  assert.equal(plugin.bottomInset(860, [band, { top: 840, bottom: 860, width: 300, height: 20 }]), 47);
+  // Nothing along the bottom edge: no inset.
+  assert.equal(plugin.bottomInset(860, []), 0);
+  assert.equal(plugin.bottomInset(860, [{ top: 100, bottom: 200, width: 900, height: 100 }]), 0);
+  // A full-height column (the drawer itself, or a sidebar) is not a band.
+  assert.equal(plugin.bottomInset(860, [{ top: 0, bottom: 860, width: 300, height: 860 }]), 0);
+  // Nor is a narrow control.
+  assert.equal(plugin.bottomInset(860, [{ top: 820, bottom: 860, width: 40, height: 40 }]), 0);
 });
 
-test('a running task offers kill, and thin payloads render without throwing', () => {
-  const running = richTask();
-  running.status = 'running';
-  running.endedAt = null;
-  running.steps = [];
-  running.logs = [];
-  running.result = null;
-  const markup = flat(plugin.TaskDetail({ task: running, onBack: () => {}, onKill: () => {}, onDismiss: () => {} }));
-  assert.ok(markup.includes('kill'));
-  assert.ok(!markup.includes('Thinking'), 'no thinking section when there is no thinking');
-
-  // The shapes the routes actually send for a task that has barely started.
-  const bare = { id: 'agy-2', status: 'running', startedAt: Date.now(), endedAt: null, cd: 'C:/repo', brief: '', toolCalls: 0, error: null, steps: [], logs: [] };
-  assert.ok(flat(plugin.TaskDetail({ task: bare })).includes('agy-2'));
-  assert.ok(flat(plugin.TaskDetail({})).includes('Loading task…'));
-  assert.ok(flat(plugin.TaskList({ tasks: [], onSelect: () => {} })).includes('No agy tasks yet'));
-  assert.ok(flat(plugin.TaskList({ tasks: [bare], onSelect: () => {} })).includes('agy-2'));
+test('the list renders every task and the calm empty state', () => {
+  assert.ok(flat(plugin.TaskList(surface())).includes('No agy tasks yet'));
+  const two = flat(plugin.TaskList(surface({ tasks: [richTask(), bareTask()] })));
+  assert.ok(two.includes('agy-1') && two.includes('agy-2'));
+  assert.ok(two.includes('done · 3s') && two.includes('running · '));
 });
