@@ -38,30 +38,6 @@ Restart the app (or reload the profile). No build step: the package ships plain 
 the browser half is a hand-written module-loader closure factory, so `npm run build` does not exist
 by design.
 
-## Use
-
-The agent-facing tools:
-
-| Tool | What it does |
-| --- | --- |
-| `agy_delegate` | Dispatch a brief. Returns immediately with a task id (`background: false` blocks instead). |
-| `agy_task` | `list` / `status` / `detail` / `wait` / `kill` / `dismiss` — inspect and control tasks. |
-
-`agy_delegate` arguments mirror the skill's dispatch flags: `brief` (required), `cd`, `model`,
-`effort`, `readOnly` (agy sandbox + auto-approved tools inside it), `sandbox`,
-`dangerouslySkipPermissions`, `printTimeout`, `addDirs`, `resumeLast`, `conversation`, `project`.
-`readOnly` and `dangerouslySkipPermissions` are mutually exclusive, exactly as in the skill.
-
-The widget always sits in the frame-wide `shell.overlay` layer: a pill showing the running count
-(`0 tasks` when idle), expanding into the task list — several delegations can be in flight, and the
-empty list is itself the answer to "is anything running?" — and, for one task, its live transcript.
-Drag its header to move it; the corner is remembered per browser.
-
-`agy` processes can only edit what its own permissions allow. Headless agy cannot answer a
-permission prompt, so a run that needs a denied tool fails with an explicit message instead of
-silently doing nothing — grant the tool in agy's settings, or dispatch with `readOnly` /
-`dangerouslySkipPermissions`.
-
 ## Configuration
 
 Optional keys on the plugin's row in `cordis.patch.yml`:
@@ -73,8 +49,63 @@ Optional keys on the plugin's row in `cordis.patch.yml`:
     agyPath: agy          # the agy executable
     printTimeout: 30m     # default print timeout when a dispatch omits one
     maxConcurrent: 4      # concurrent agy runs; a dispatch past it is refused, not queued
+    skipPermissions: true # full access by default (see below); false requires agy allow-rules
+    reuseProjects: true   # join the root's existing agy project instead of opening one
+    projectsDir: null     # agy's project registry (default ~/.gemini/config/projects)
     enabled: true
 ```
+
+## Bundled skill
+
+The plugin ships the `agy-delegate` skill, so `/agy-delegate` works without the skill being
+installed: `skills/agy-delegate/` holds a verbatim copy of upstream (SKILL.md, the four reference
+documents and `scripts/relay.mjs`) and the host half registers it with the `skills` service, pointing
+`resourceBase` at that directory so the references and the relay resolve. Upstream is delegate-skills
+by Ahmed Mohammed (amElnagdy), MIT — see `skills/agy-delegate/UPSTREAM.md`. The only difference from
+upstream is a short "In this install" note appended to the text an agent reads; `SKILL.md` on disk
+stays byte-identical, so re-copying it from upstream is a plain file copy.
+
+If the profile has no `skills` service the registration is skipped with a warning and everything else
+still works; if the user has their own copy installed, that copy wins the name, which is the point of
+letting a user override a plugin.
+
+## Dispatch semantics
+
+Two deliberate differences from the skill's relay lane:
+
+- **The project is reused.** Before dispatching, the plugin looks the working root up in agy's project
+  registry (`~/.gemini/config/projects/*.json`) and joins the project that already owns it. Repeated
+  briefs against one repository therefore share its history and `--resume-last` stays meaningful,
+  instead of scattering the repo across a project per dispatch. Only a root with no project gets a new
+  one; `newProject: true` forces that. `result.json` and the widget's detail line report which project
+  the run joined.
+- **Runs use full access.** `--dangerously-skip-permissions` is passed by default, because headless
+  agy cannot answer a permission prompt and a run without it dies on the first tool that needs one.
+  Scope the brief accordingly; `dangerouslySkipPermissions: false` requires pre-granted allow-rules,
+  and `readOnly: true` still means sandboxed plus auto-approved inside the sandbox, with writes
+  discarded.
+
+## Use
+
+The agent-facing tools:
+
+| Tool | What it does |
+| --- | --- |
+| `agy_delegate` | Dispatch a brief. Returns immediately with a task id (`background: false` blocks instead). |
+| `agy_task` | `list` / `status` / `detail` / `wait` / `kill` / `dismiss` — inspect and control tasks. |
+
+`agy_delegate` arguments mirror the skill's dispatch flags: `brief` (required), `cd`, `model`,
+`effort`, `readOnly` (agy sandbox + auto-approved tools inside it), `sandbox`,
+`dangerouslySkipPermissions` (default true — see "Dispatch semantics"), `newProject`, `printTimeout`,
+`addDirs`, `resumeLast`, `conversation`, `project`. `readOnly` plus an explicit
+`dangerouslySkipPermissions` is refused, exactly as in the skill.
+
+The widget always sits in the frame-wide `shell.overlay` layer: a pill showing the running count
+(`0 tasks` when idle), expanding into the task list — several delegations can be in flight, and the
+empty list is itself the answer to "is anything running?" — and, for one task, its live transcript.
+Drag its header to move it (or use the header's reset button, or arrow keys while it is focused);
+the corner is remembered per browser, and the panel is clamped to the viewport so it can never grow
+off-screen.
 
 ## Layout
 
