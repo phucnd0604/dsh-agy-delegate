@@ -26,11 +26,19 @@ function createElement(type, props, ...children) {
   return { type, props: next, $$typeof: Symbol.for('react.element') };
 }
 
+/** Enough of the hooks surface for a direct call of the hook-owning widget. */
+const reactStub = {
+  createElement,
+  useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+  useEffect: () => {},
+  useRef: () => ({ current: null }),
+};
+
 await import('../lib/client.js');
 
 /** The plugin face the loader asks for. */
 const plugin = captured.factory((specifier) => {
-  if (specifier === 'react') return { createElement, useState: () => [null, () => {}], useEffect: () => {}, useRef: () => ({ current: null }) };
+  if (specifier === 'react') return reactStub;
   throw new Error(`unexpected require: ${specifier}`);
 });
 
@@ -127,6 +135,17 @@ test('the collapsed pill says what is running', () => {
 
   const one = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }], running: 0, pos, onClick: () => {} }));
   assert.ok(one.includes('1 task'));
+});
+
+test('the widget is always mounted, with an empty list before anything runs', () => {
+  // The widget never returns null: several delegations can be in flight, and
+  // with none the panel's empty state is still the place to look.
+  const first = plugin.AgyWidget({});
+  assert.notEqual(first, null);
+  assert.ok(flat(first).includes('agy'));
+
+  const empty = flat(plugin.Pill({ tasks: [], running: 0, pos: { right: 24, bottom: 96 }, onClick: () => {} }));
+  assert.ok(empty.includes('0 tasks'));
 });
 
 test('the panel lists tasks and, when one is selected, its live transcript', () => {

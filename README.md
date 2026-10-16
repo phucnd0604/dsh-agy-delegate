@@ -52,9 +52,10 @@ The agent-facing tools:
 `dangerouslySkipPermissions`, `printTimeout`, `addDirs`, `resumeLast`, `conversation`, `project`.
 `readOnly` and `dangerouslySkipPermissions` are mutually exclusive, exactly as in the skill.
 
-The widget appears in the frame-wide `shell.overlay` layer as soon as a task exists: a pill with the
-running count, expanding into the task list and a live transcript per task. Drag its header to move
-it; the corner is remembered per browser.
+The widget always sits in the frame-wide `shell.overlay` layer: a pill showing the running count
+(`0 tasks` when idle), expanding into the task list — several delegations can be in flight, and the
+empty list is itself the answer to "is anything running?" — and, for one task, its live transcript.
+Drag its header to move it; the corner is remembered per browser.
 
 `agy` processes can only edit what its own permissions allow. Headless agy cannot answer a
 permission prompt, so a run that needs a denied tool fails with an explicit message instead of
