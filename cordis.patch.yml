@@ -1,0 +1,6 @@
+# dsh-agy-delegate bundle patch: one row mounts both halves — the host half
+# (agy spawn, task registry, /api/agy-delegate/* routes, agent tools) and the
+# browser half (the floating status widget in the shell.overlay layer).
+- insert:
+    - id: agy-delegate
+      name: 'dsh-agy-delegate'
