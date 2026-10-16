@@ -24,6 +24,14 @@
     "delegate"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phucnd0604/dsh-agy-delegate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/phucnd0604/dsh-agy-delegate/issues"
+  },
+  "homepage": "https://github.com/phucnd0604/dsh-agy-delegate#readme",
   "engines": {
     "node": ">=20"
   },
