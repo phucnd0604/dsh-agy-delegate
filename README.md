@@ -14,11 +14,16 @@ the run is over.
 - `agy` installed and logged in (`agy models` succeeds).
 - DSH with the web profile (the widget lives in the browser half).
 
-Check the install before trusting it:
+Check the install before trusting it — the unit tests are free, the scripts each
+spend real agy runs:
 
 ```bash
-node scripts/smoke.mjs          # one real agy round trip: dispatch, stream, result.json
-node --test test/*.test.mjs     # pure NDJSON projection logic
+node --test test/*.test.mjs              # pure logic: NDJSON projection, widget renders, project lookup, skill payload
+node scripts/smoke.mjs                   # one real agy round trip through the runner
+node scripts/verify-project-reuse.mjs    # two real briefs: full access by default, then the same project reused
+node scripts/verify-host-half.mjs        # mounts the host half on a fake context and drives the tool plus the
+                                         # widget's own HTTP routes against live agy (21 checks: skill registration,
+                                         # loopback guard, dispatch, reuse, route payloads)
 ```
 
 ## Install
