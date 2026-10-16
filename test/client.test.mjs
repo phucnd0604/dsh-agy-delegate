@@ -108,7 +108,9 @@ test('registers as a client plugin and seats the widget in shell.overlay', () =>
 
   const registered = [];
   const injected = [];
+  const effects = [];
   plugin.apply({
+    effect: (callback, label) => { effects.push(label); return callback(); },
     slots: {
       inject: (name, callback) => { injected.push(name); return callback(); },
       register: (spec, component) => { registered.push({ spec, component }); return () => {}; },
@@ -116,6 +118,7 @@ test('registers as a client plugin and seats the widget in shell.overlay', () =>
   });
 
   assert.deepEqual(injected, ['shell.overlay']);
+  assert.ok(effects.some((label) => String(label).includes('styles')), 'the stylesheet is installed as an effect');
   assert.equal(registered.length, 1);
   assert.equal(registered[0].spec.name, 'shell.overlay');
   assert.equal(registered[0].spec.id, 'agy-delegate');
@@ -126,9 +129,10 @@ test('registers as a client plugin and seats the widget in shell.overlay', () =>
 test('the collapsed pill says what is running', () => {
   const pos = { right: 24, bottom: 96 };
   const running = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'running', startedAt: Date.now(), endedAt: null, cd: '', brief: '', toolCalls: 0 }], running: 1, pos, onClick: () => {} }));
-  assert.match(running, /^agy\n1 running$/m);
   assert.ok(running.includes('agy'));
   assert.ok(running.includes('1 running'));
+  // The count is announced as a sentence, not a bare number.
+  assert.ok(running.includes('1 of 1 agy tasks running'));
 
   const idle = flat(plugin.Pill({ tasks: [{ id: 'a', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }, { id: 'b', status: 'done', startedAt: 1, endedAt: 2, cd: '', brief: '', toolCalls: 0 }], running: 0, pos, onClick: () => {} }));
   assert.ok(idle.includes('2 tasks'));
@@ -160,6 +164,8 @@ test('the panel lists tasks and, when one is selected, its live transcript', () 
     onDismiss: () => {},
     onCollapse: () => {},
     onStartDrag: () => {},
+    onNudge: () => {},
+    onResetPos: () => {},
   };
 
   const list = flat(plugin.Panel({ ...base, selected: null, detail: null }));
@@ -167,12 +173,42 @@ test('the panel lists tasks and, when one is selected, its live transcript', () 
   assert.ok(list.includes('agy-1'));
   assert.ok(list.includes('Fix the widget'));
   assert.ok(list.includes('gemini-4-argon-high · C:/repo'));
+  assert.ok(list.includes('1 agy task, none running'));
 
   const detail = flat(plugin.Panel({ ...base, selected: 'agy-1', detail: task }));
-  for (const expected of ['Thinking (1)', 'Answer (1)', 'Tool calls (1)', 'run_command', 'permission check failed', 'tokens in 10 · out 20 · thinking 3 · cache 0', 'agy output (1)', '3s']) {
+  for (const expected of ['Thinking', 'Answer', 'Tool calls', 'run_command', 'permission check failed', 'agy output', 'in 10', 'out 20', 'thinking 3', 'cache 0', '3s', 'dismiss', 'all tasks']) {
     assert.ok(detail.includes(expected), `detail should show ${expected}`);
   }
-  assert.ok(detail.includes('dismiss'), 'a finished task offers dismiss, not kill');
+  assert.ok(!detail.includes('kill'), 'a finished task offers dismiss, not kill');
+});
+
+test('the widget keeps itself inside the frame', () => {
+  // Regression: the panel used to grow past the viewport, pushing its header —
+  // the only drag/reset/collapse handle — off the top of the screen.
+  assert.deepEqual(plugin.clampPos({ right: 24, bottom: 96 }, 1280, 860), { right: 24, bottom: 96 });
+  assert.deepEqual(plugin.clampPos({ right: -50, bottom: 9_999 }, 1280, 860), { right: 4, bottom: 580 });
+  assert.deepEqual(plugin.clampPos({ right: 1_999, bottom: -20 }, 1280, 860), { right: 1_180, bottom: 4 });
+
+  assert.equal(plugin.panelWidth(1280), 470);
+  assert.equal(plugin.panelWidth(360), 336);
+  assert.equal(plugin.panelWidth(200), 240, 'a floor keeps the panel usable on absurd widths');
+
+  // Whatever the corner, min(70vh, 620, room above the corner) leaves the panel
+  // fully on screen.
+  assert.equal(plugin.panelMaxHeight(860, 96), 602);
+  assert.equal(plugin.panelMaxHeight(860, 580), 264);
+  assert.equal(plugin.panelMaxHeight(1_200, 40), 620);
+  for (const bottom of [4, 96, 300, 580]) {
+    const max = plugin.panelMaxHeight(860, bottom);
+    assert.ok(bottom + max <= 860, `panel fits above the corner at bottom=${bottom}`);
+  }
+
+  // The rendered panel applies both bounds.
+  const panel = plugin.Panel({ tasks: [], running: 0, pos: { right: 24, bottom: 96 }, selected: null, detail: null, onSelect: () => {}, onBackToAll: () => {}, onKill: () => {}, onDismiss: () => {}, onCollapse: () => {}, onStartDrag: () => {}, onNudge: () => {}, onResetPos: () => {} });
+  assert.equal(panel.props.style.width, 470);
+  assert.equal(panel.props.style.maxHeight, 602);
+  assert.ok(plugin.CSS.includes('min-height: 0'), 'the scrolling body must be a shrinkable flex child');
+  assert.ok(plugin.CSS.includes('max-height'), 'the panel needs its own height ceiling');
 });
 
 test('a running task offers kill, and thin payloads render without throwing', () => {
@@ -190,6 +226,6 @@ test('a running task offers kill, and thin payloads render without throwing', ()
   const bare = { id: 'agy-2', status: 'running', startedAt: Date.now(), endedAt: null, cd: 'C:/repo', brief: '', toolCalls: 0, error: null, steps: [], logs: [] };
   assert.ok(flat(plugin.TaskDetail({ task: bare })).includes('agy-2'));
   assert.ok(flat(plugin.TaskDetail({})).includes('Loading task…'));
-  assert.ok(flat(plugin.TaskList({ tasks: [], onSelect: () => {} })).includes('No agy tasks.'));
+  assert.ok(flat(plugin.TaskList({ tasks: [], onSelect: () => {} })).includes('No agy tasks yet'));
   assert.ok(flat(plugin.TaskList({ tasks: [bare], onSelect: () => {} })).includes('agy-2'));
 });
