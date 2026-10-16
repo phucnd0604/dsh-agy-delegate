@@ -139,7 +139,7 @@ check('the second dispatch reused the project', second.task?.reusedProject === t
   `first ${started.task?.projectId} vs second ${second.task?.projectId}`);
 
 const status = await tools.get('agy_task').execute({ action: 'list' });
-check('agy_task lists both', status.tasks?.length === 2, `${status.tasks?.length} tasks`);
+check('agy_task lists every task', status.tasks?.length === 2, `${status.tasks?.length} tasks`);
 
 for (const dispose of disposers.reverse()) dispose();
 check('teardown unregistered the skill', skills.length === 0, `${skills.length} left`);
