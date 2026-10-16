@@ -62,6 +62,20 @@ permission prompt, so a run that needs a denied tool fails with an explicit mess
 silently doing nothing — grant the tool in agy's settings, or dispatch with `readOnly` /
 `dangerouslySkipPermissions`.
 
+## Configuration
+
+Optional keys on the plugin's row in `cordis.patch.yml`:
+
+```yaml
+- id: agy-delegate
+  name: dsh-agy-delegate
+  config:
+    agyPath: agy          # the agy executable
+    printTimeout: 30m     # default print timeout when a dispatch omits one
+    maxConcurrent: 4      # concurrent agy runs; a dispatch past it is refused, not queued
+    enabled: true
+```
+
 ## Layout
 
 ```
