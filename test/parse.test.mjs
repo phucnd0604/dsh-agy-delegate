@@ -10,6 +10,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createParser, findPermissionDenial, isAnswerStep, isPermissionDenial, permissionDenialMessage } from '../lib/parse.js';
@@ -33,16 +34,17 @@ const INVALID_ARGS = {
     + 'The system cannot find the file specified.',
 };
 
-test('folds a plain answer run into one normalized transcript', () => {
+/**
+ * The recorded agy run behind test/fixtures/agy-run.jsonl; the conformance
+ * harness folds the same pair in test/backends/contract.test.mjs.
+ */
+const AGY_RUN = readFileSync(new URL('./fixtures/agy-run.jsonl', import.meta.url), 'utf8')
+  .split(/\r?\n/u)
+  .filter((line) => line.trim() !== '');
+
+test('folds the recorded agy run into one normalized transcript', () => {
   const parser = createParser();
-  const lines = [
-    '{"event":"init","conversation_id":"d93dec18-fa0f-4f79-af12-11fa24d9be7c","init":{"cwd":"C:\\\\tmp","tools":["run_command","view_file"],"permission_mode":"request-review"}}',
-    '{"event":"step_update","step_update":{"conversation_id":"d93dec18","step_index":0,"state":"DONE","step_type":"user_input"}}',
-    '{"event":"step_update","step_update":{"conversation_id":"d93dec18","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"po"}}',
-    '{"event":"step_update","step_update":{"conversation_id":"d93dec18","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"ng"}}',
-    '{"event":"step_update","step_update":{"conversation_id":"d93dec18","step_index":1,"state":"DONE","step_type":"agent_response","text_delta":"\\n","duration_seconds":4.49,"usage":{"input_tokens":16923,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":16928}}}',
-    '{"event":"result","result":{"conversation_id":"d93dec18","status":"SUCCESS","response":"pong\\n","duration_seconds":4.55,"num_turns":1,"usage":{"input_tokens":16923,"output_tokens":5,"total_tokens":16928}}}',
-  ];
+  const lines = AGY_RUN;
   const steps = lines.flatMap((line) => parser.push(line));
 
   // The session step comes first: it is how a run becomes resumable.

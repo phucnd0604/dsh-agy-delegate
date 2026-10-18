@@ -1,0 +1,27 @@
+[
+  {
+    "kind": "session",
+    "id": "d93dec18-fa0f-4f79-af12-11fa24d9be7c"
+  },
+  {
+    "kind": "tool",
+    "name": "run_command",
+    "error": {
+      "type": "TOOL_ERROR",
+      "message": "permission check failed"
+    }
+  },
+  {
+    "kind": "answer",
+    "text": "pong\n"
+  },
+  {
+    "kind": "cost",
+    "usd": null,
+    "tokens": {
+      "input_tokens": 16923,
+      "output_tokens": 5,
+      "total_tokens": 16928
+    }
+  }
+]

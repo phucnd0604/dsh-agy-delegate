@@ -1,0 +1,30 @@
+[
+  {
+    "kind": "session",
+    "id": "ses_eb27e78daffeF7WiKsXdkalz8H"
+  },
+  {
+    "kind": "tool",
+    "name": "shell",
+    "input": {
+      "command": "echo hi"
+    }
+  },
+  {
+    "kind": "cost",
+    "usd": 0,
+    "tokens": {
+      "input": 3447,
+      "output": 38,
+      "reasoning": 0,
+      "cache": {
+        "read": 2944,
+        "write": 0
+      }
+    }
+  },
+  {
+    "kind": "answer",
+    "text": "done"
+  }
+]
