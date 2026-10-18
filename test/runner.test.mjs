@@ -1,13 +1,15 @@
 /**
  * The registry's one piece of branching logic that does not need a live agy:
  * the concurrency ceiling that keeps a fan-out of delegations from stacking
- * local agent runs without limit.
+ * local agent runs without limit — plus the verdict that turns a silent agy
+ * refusal into a failure.
  */
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_MAX_CONCURRENT, concurrencyRefusal, settleOutcome } from '../lib/runner.js';
+import { DEFAULT_MAX_CONCURRENT, concurrencyRefusal } from '../lib/runner.js';
+import { settleOutcome } from '../lib/backends/agy.js';
 
 test('refuses to start past the concurrency ceiling', () => {
   assert.equal(concurrencyRefusal(0, 4), null);
@@ -17,7 +19,7 @@ test('refuses to start past the concurrency ceiling', () => {
   assert.match(atCeiling, /maxConcurrent 4/);
   assert.match(atCeiling, /agy_task/);
 
-  assert.match(concurrencyRefusal(6, 4), /^6 agy tasks are already running/);
+  assert.match(concurrencyRefusal(6, 4), /^6 tasks are already running/);
   assert.equal(DEFAULT_MAX_CONCURRENT, 4);
 });
 

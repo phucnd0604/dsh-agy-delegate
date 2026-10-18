@@ -16,15 +16,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createRegistry } from '../lib/runner.js';
+import { createBackends } from '../lib/backends/registry.js';
 import { findProjectForCwd } from '../lib/projects.js';
 
 const home = mkdtempSync(join(tmpdir(), 'agy-reuse-home-'));
 const work = mkdtempSync(join(tmpdir(), 'agy-reuse-work-'));
-const registry = createRegistry({ home, agyPath: 'agy', maxConcurrent: 1, log: (line) => console.log('[host]', line) });
+const registry = createRegistry({
+  home,
+  backends: createBackends({ config: {} }),
+  maxConcurrent: 1,
+  log: (line) => console.log('[host]', line),
+});
 
 /** Dispatch one brief and wait for it, printing what the widget would show. */
 async function dispatch(name, brief) {
-  const row = registry.start({ brief, cd: work, printTimeout: '150s' });
+  const row = registry.start({ backend: 'agy', brief, cd: work, printTimeout: '150s' });
   const detail = await registry.wait(row.id, 200_000);
   const tools = detail.steps.filter((step) => step.toolName !== undefined).map((step) => step.toolName);
   console.log(`\n${name}: status=${detail.status} reusedProject=${detail.reusedProject} project=${detail.projectId ?? '-'} (${detail.projectName ?? '-'})`);

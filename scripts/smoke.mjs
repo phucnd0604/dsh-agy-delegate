@@ -12,12 +12,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createRegistry } from '../lib/runner.js';
+import { createBackends } from '../lib/backends/registry.js';
 
 const home = mkdtempSync(join(tmpdir(), 'delegate-smoke-'));
 const work = mkdtempSync(join(tmpdir(), 'delegate-work-'));
-const registry = createRegistry({ home, agyPath: 'agy', log: (line) => console.log('[host]', line) });
+const registry = createRegistry({
+  home,
+  backends: createBackends({ config: {} }),
+  log: (line) => console.log('[host]', line),
+});
 
 const started = registry.start({
+  backend: 'agy',
   brief: 'Reply with exactly the word pong. Do not use any tools.',
   cd: work,
   model: process.argv[2],

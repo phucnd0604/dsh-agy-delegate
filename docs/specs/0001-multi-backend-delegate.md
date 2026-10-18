@@ -42,9 +42,10 @@ no class, no `this`):
 export const descriptor = {
   id: 'opencode',                 // tool enum value, route field, config key
   label: 'OpenCode CLI',          // widget badge and probe display name
+  bin: 'opencode',                // executable when the config names no path
   skill: {                        // the bundled skill that documents this backend's loop
     name: 'open-code-subagent',
-    dir: bundledSkillDir('open-code-subagent'),
+    dir: 'skills/open-code-subagent',
     upstream: 'https://github.com/amElnagdy/delegate-skills (MIT)',
   },
   capabilities: {
@@ -54,15 +55,31 @@ export const descriptor = {
     resume: ['resumeLast', 'session'],
     auto: true,                   // has an auto-approve dial
   },
-  defaults: { auto: true },
+  defaults: { /* config keys this backend always needs */ },
   optionsSchema: { /* JSON Schema for the per-backend "options" bag */ },
 
-  probe({ bin }) { /* -> { found, version, extra? } , never throws */ },
-  listModels({ bin }) { /* -> string[] | null , never throws */ },
-  buildArgv(task) { /* -> { argv, stdin? , env? } */ },
-  parseEvent(line, task) { /* -> Step | null , never throws on garbage */ },
+  // Health and identity: observed facts, never configuration.
+  probe({ bin }) { /* -> { found, version, models, error? }, never throws */ },
+  listModels({ bin }) { /* -> string[] | null, never throws */ },
   describeModel(model) { /* -> short label for the widget row, optional */ },
+
+  // One dispatch: build the command, then judge and describe the run.
+  buildArgv(task) { /* -> { argv, stdin?, env?, facts? } */ },
+  createStream() { /* -> { push(line) -> event[], steps(), logs(), result(), info() } */ },
+  timeoutMs(task) { /* -> ms for the watchdog, or null */ },
+  timeoutMessage(task) { /* -> what the watchdog records */ },
+  denialIn(event) { /* -> { tool, message } | null: a live refusal worth killing for */ },
+  denialMessage(denial) { /* -> the actionable error text */ },
+  settled({ task, stream, code, signal }) { /* -> { status, error?, deniedTool? } */ },
+  factsAfterRun(task, stream) { /* fills ids/usage/answer only this CLI carries */ },
+  answerOf(steps) { /* -> the answer text the row shows */ },
+
+  // Optional: read flat config keys from before the seam (agy does; #9 removes it).
+  legacyConfig(config) { /* -> partial config */ },
 };
+// parseEvent(line, task) from the first sketch is createStream() in the shipped
+// contract: a CLI's stream is stateful (init, deltas, tool results, final), so the
+// adapter owns one projector per process instead of a stateless per-line fold.
 ```
 
 The core (`lib/runner.js`, `lib/index.js`, `lib/client.js`) knows only this contract. It never imports a
