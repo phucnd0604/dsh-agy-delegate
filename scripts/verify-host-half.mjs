@@ -82,7 +82,7 @@ check('the bundled skill registered with the skills service', skill !== undefine
 check('it points resourceBase at the shipped directory',
   skill?.resourceBase?.kind === 'directory' && skill.resourceBase.path.endsWith(join('skills', 'agy-delegate')),
   skill?.resourceBase?.path);
-check('its body carries the install note', skill?.content.includes('## In this install (dsh-agy-delegate)') === true);
+check('its body carries the install note', skill?.content.includes('## In this install (dsh-delegate)') === true);
 check('it stays model- and user-invocable', skill?.invocation?.modelInvocable === true && skill?.invocation?.userInvocable === true);
 
 // --- the routes are the widget's contract -----------------------------------
@@ -94,11 +94,11 @@ const call = async (path, req) => {
   return { status: res.state.status, json: res.state.body === '' ? null : JSON.parse(res.state.body) };
 };
 
-const blocked = await call('/api/agy-delegate/tasks', request('/api/agy-delegate/tasks', { remote: '10.1.2.3' }));
+const blocked = await call('/api/delegate/tasks', request('/api/delegate/tasks', { remote: '10.1.2.3' }));
 check('a non-loopback caller is refused', blocked.status === 403, `status ${blocked.status}`);
-const crossSite = await call('/api/agy-delegate/tasks', request('/api/agy-delegate/tasks', { origin: 'http://evil.example' }));
+const crossSite = await call('/api/delegate/tasks', request('/api/delegate/tasks', { origin: 'http://evil.example' }));
 check('a cross-origin caller is refused', crossSite.status === 403, `status ${crossSite.status}`);
-const wrongMethod = await call('/api/agy-delegate/tasks', request('/api/agy-delegate/tasks', { method: 'POST' }));
+const wrongMethod = await call('/api/delegate/tasks', request('/api/delegate/tasks', { method: 'POST' }));
 check('a write to a read route is refused', wrongMethod.status === 405, `status ${wrongMethod.status}`);
 
 // --- a real dispatch through the tool, then read it through the routes -------
@@ -115,12 +115,12 @@ check('the run used full access by default', started.task?.steps?.some((step) =>
 check('the answer came back through the tool', String(started.message).includes('host-ok') || started.task?.answer?.includes('host-ok') === true);
 check('a fresh project was opened for the new root', started.task?.reusedProject === false && typeof started.task?.projectId === 'string');
 
-const list = await call('/api/agy-delegate/tasks', request('/api/agy-delegate/tasks'));
+const list = await call('/api/delegate/tasks', request('/api/delegate/tasks'));
 const row = list.json.tasks.find((task) => task.id === started.task.id);
 check('the widget list route reports the task', list.status === 200 && row !== undefined, row === undefined ? 'missing' : `${row.status} ${row.toolCalls} tools`);
 check('the row carries what the pill renders', row?.brief?.startsWith('Use the run_command tool') === true && typeof row?.cd === 'string');
 
-const detail = await call(`/api/agy-delegate/task?id=${started.task.id}`, request(`/api/agy-delegate/task?id=${started.task.id}`));
+const detail = await call(`/api/delegate/task?id=${started.task.id}`, request(`/api/delegate/task?id=${started.task.id}`));
 const steps = detail.json.task.steps ?? [];
 check('the detail route returns the folded steps', detail.status === 200 && steps.length >= 2, `${steps.length} steps`);
 check('thinking/answer/tool data survive the round trip',

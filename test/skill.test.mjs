@@ -33,6 +33,7 @@ test('the registration is one the skills service can take', () => {
   assert.equal(skill.resourceBase.kind, 'directory');
   assert.equal(skill.resourceBase.path, bundledSkillDir());
   assert.match(skill.metadata.upstream, /amElnagdy\/delegate-skills/);
+  assert.equal(skill.metadata.plugin, 'dsh-delegate', 'the catalog attributes the skill to the renamed plugin');
   // A summary is what the catalog carries; only `get` loads the body.
   assert.equal(typeof skill.content, 'string');
 });
@@ -45,7 +46,7 @@ test('the body keeps upstream intact and adds the install note', () => {
   assert.ok(skill.content.includes('# Antigravity Delegate'));
   assert.ok(skill.content.includes('## The loop'), 'upstream sections survive');
 
-  assert.ok(skill.content.includes('## In this install (dsh-agy-delegate)'));
+  assert.ok(skill.content.includes('## In this install (dsh-delegate)'));
   assert.ok(skill.content.includes('agy_delegate'), 'the note names the tool the widget watches');
   assert.ok(skill.content.includes('agy_task'));
   assert.ok(skill.content.includes('scripts/relay.mjs'), 'the relay path stays documented');

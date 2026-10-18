@@ -13,8 +13,8 @@ import { join } from 'node:path';
 
 import { createRegistry } from '../lib/runner.js';
 
-const home = mkdtempSync(join(tmpdir(), 'agy-delegate-smoke-'));
-const work = mkdtempSync(join(tmpdir(), 'agy-delegate-work-'));
+const home = mkdtempSync(join(tmpdir(), 'delegate-smoke-'));
+const work = mkdtempSync(join(tmpdir(), 'delegate-work-'));
 const registry = createRegistry({ home, agyPath: 'agy', log: (line) => console.log('[host]', line) });
 
 const started = registry.start({
@@ -40,7 +40,7 @@ for (const step of detail.steps) {
 }
 console.log('answer:', JSON.stringify(detail.answer));
 console.log('result.json:');
-const resultPath = join(home, 'agy-delegate', 'runs', started.id, 'result.json');
+const resultPath = join(home, 'delegate', 'runs', started.id, 'result.json');
 console.log(existsSync(resultPath) ? readFileSync(resultPath, 'utf8') : '(missing!)');
 
 assert.equal(detail.status, 'done', 'task should settle as done');

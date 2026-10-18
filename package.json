@@ -1,7 +1,7 @@
 {
-  "name": "dsh-agy-delegate",
-  "version": "0.1.0",
-  "description": "dsh plugin: delegate a brief to the Antigravity CLI (agy) as a background task, with a floating GUI widget showing live thinking, answer and tool calls",
+  "name": "dsh-delegate",
+  "version": "0.2.0",
+  "description": "dsh plugin: delegate a brief to a coding-agent CLI as a background task, with a floating GUI widget showing live thinking, answer and tool calls",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -26,12 +26,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/phucnd0604/dsh-agy-delegate.git"
+    "url": "git+https://github.com/phucnd0604/dsh-delegate.git"
   },
   "bugs": {
-    "url": "https://github.com/phucnd0604/dsh-agy-delegate/issues"
+    "url": "https://github.com/phucnd0604/dsh-delegate/issues"
   },
-  "homepage": "https://github.com/phucnd0604/dsh-agy-delegate#readme",
+  "homepage": "https://github.com/phucnd0604/dsh-delegate#readme",
   "engines": {
     "node": ">=20"
   },

@@ -3,7 +3,7 @@
 The files in this directory are a verbatim copy of the gy-delegate skill from
 **delegate-skills** by Ahmed Mohammed (amElnagdy): https://github.com/amElnagdy/delegate-skills
 
-They are bundled with the dsh-agy-delegate plugin so the skill works without a
+They are bundled with the dsh-delegate plugin so the skill works without a
 separate install. The only difference from upstream is that the plugin appends a
 short "In this install" note (see lib/skill.js) to the text the agent reads;
 SKILL.md on disk stays byte-identical to upstream.

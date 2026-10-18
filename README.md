@@ -1,4 +1,4 @@
-# dsh-agy-delegate
+# dsh-delegate
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/dsh) plugin that hands a brief to the
 **Antigravity CLI** (`agy`) as a **background task**, and shows that task live in a floating
@@ -29,14 +29,14 @@ node scripts/verify-host-half.mjs        # mounts the host half on a fake contex
 ## Install
 
 ```bash
-dsh plugin --profile <profile> add link:/absolute/path/to/dsh-agy-delegate
+dsh plugin --profile <profile> add link:/absolute/path/to/dsh-delegate
 ```
 
 then mount it by adding a row to that profile's `cordis.patch.yml`:
 
 ```yaml
-- id: agy-delegate
-  name: dsh-agy-delegate
+- id: delegate
+  name: dsh-delegate
 ```
 
 Restart the app (or reload the profile). No build step: the package ships plain ESM in `lib/`, and
@@ -48,8 +48,8 @@ by design.
 Optional keys on the plugin's row in `cordis.patch.yml`:
 
 ```yaml
-- id: agy-delegate
-  name: dsh-agy-delegate
+- id: delegate
+  name: dsh-delegate
   config:
     agyPath: agy          # the agy executable
     printTimeout: 30m     # default print timeout when a dispatch omits one
@@ -115,7 +115,7 @@ off-screen.
 ## Layout
 
 ```
-lib/index.js    host half: tools + loopback /api/agy-delegate/* routes
+lib/index.js    host half: tools + loopback /api/delegate/* routes
 lib/runner.js   agy spawn, task registry, run artifacts, watchdog, tree kill
 lib/parse.js    pure NDJSON -> events/steps projection (the only unit-tested logic)
 lib/client.js   browser half: the floating widget
@@ -123,7 +123,7 @@ scripts/smoke.mjs  one real end-to-end agy run
 ```
 
 Every run writes `brief.txt`, `events.jsonl`, `agy.log`, `stderr.txt`, `final.txt` and a
-relay-shaped `result.json` under `$DSH_HOME/agy-delegate/runs/<task id>/`.
+relay-shaped `result.json` under `$DSH_HOME/delegate/runs/<task id>/`.
 
 The HTTP routes are loopback-only and origin-checked; they answer only this machine's GUI.
 

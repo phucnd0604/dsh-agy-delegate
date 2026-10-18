@@ -115,7 +115,7 @@ function surface(overrides) {
 }
 
 test('registers as a client plugin and seats the widget in shell.overlay', () => {
-  assert.equal(captured.id, 'dsh-agy-delegate');
+  assert.equal(captured.id, 'dsh-delegate');
   assert.deepEqual(plugin.inject, ['slots']);
   assert.equal(typeof plugin.apply, 'function');
 
@@ -134,7 +134,7 @@ test('registers as a client plugin and seats the widget in shell.overlay', () =>
   assert.ok(effects.some((label) => String(label).includes('styles')), 'the stylesheet is installed as an effect');
   assert.equal(registered.length, 1);
   assert.equal(registered[0].spec.name, 'shell.overlay');
-  assert.equal(registered[0].spec.id, 'agy-delegate');
+  assert.equal(registered[0].spec.id, 'delegate');
   assert.equal(typeof registered[0].spec.label(), 'string');
   assert.equal(registered[0].component, plugin.AgyWidget);
 });
@@ -167,7 +167,7 @@ test('the drawer is docked right at full window height', () => {
   const panel = plugin.Panel({ ...surface({ tasks: [richTask()] }) });
   assert.equal(panel.type, 'aside', 'the drawer is a landmark, not a floating card');
   assert.ok(String(panel.props.className).includes('agd-drawer'));
-  assert.equal(panel.props['aria-label'], 'agy delegate tasks');
+  assert.equal(panel.props['aria-label'], 'delegate tasks');
 
   // Docked: pinned to the right edge, spanning top to bottom.
   const drawer = plugin.CSS.slice(plugin.CSS.indexOf('.agd-drawer'), plugin.CSS.indexOf('.agd-head'));
