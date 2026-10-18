@@ -46,12 +46,12 @@ export const descriptor = {
   skill: {                        // the bundled skill that documents this backend's loop
     name: 'open-code-subagent',
     dir: 'skills/open-code-subagent',
-    upstream: 'https://github.com/amElnagdy/delegate-skills (MIT)',
+    upstream: 'https://github.com/amElnagdy/delegate-skills', // source repo; "(MIT)" is appended to the metadata
   },
   capabilities: {
     modelRequired: true,          // refuse a dispatch that names no model
     modelList: true,              // adapter can enumerate models for suggestions
-    readOnly: 'plan-agent',       // how "look but do not edit" is expressed
+    readOnly: 'plan',             // how "look but do not edit" is expressed
     resume: ['resumeLast', 'session'],
     auto: true,                   // has an auto-approve dial
     fullAccessOption: 'auto',     // the options key that means "full access"; refused with readOnly
@@ -173,9 +173,19 @@ One skill per adapter, one directory per skill, both registered on mount even wh
 | agy | `skills/agy-sub-agent/` (renamed from `skills/agy-delegate/`) | `agy-sub-agent` |
 | opencode | `skills/open-code-subagent/` (copied verbatim from the upstream `opencode-delegate` skill) | `open-code-subagent` |
 
-Each `SKILL.md` stays byte-identical to its upstream copy, an `UPSTREAM.md` records the source, and the
-"In this install" appendix is appended at registration time (the current pattern in `lib/skill.js`), so an
-upstream refresh is a plain file copy.
+Each `SKILL.md` stays byte-identical to its upstream copy; an `UPSTREAM.md` records the source, the pinned
+commit, and one git blob hash per vendored file, so drift is detectable offline. The "In this install"
+appendix is generated from the adapter's descriptor and appended at registration time (the pattern in
+`lib/skill.js`), so an upstream refresh is a plain file copy. Both bundles are pinned at
+`amElnagdy/delegate-skills` commit `3aa72d681a79e2a9d09bd9a316353003ae1cb4a7` (2026-10-14), recorded in
+each `UPSTREAM.md`.
+
+`bundledSkills(backends)` derives the bundles from the descriptors, so a new adapter ships its skill by
+declaring `skill: { name, dir, upstream }` — nothing in `lib/skill.js` names a CLI. The registered name is
+the descriptor's; the upstream frontmatter keeps its own `name:` because the file is copied verbatim. A
+descriptor may also declare `capabilities.projectReuse` (agy names `'newProject'`) when a dispatch joins
+the root's existing project instead of opening a new one; the value is the `options` key that forces a
+fresh project.
 
 ### 5.7 Widget
 

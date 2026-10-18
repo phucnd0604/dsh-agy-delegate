@@ -4,8 +4,8 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/dsh) plugin that hands a bri
 **Antigravity CLI** (`agy`) as a **background task**, and shows that task live in a floating
 widget: thinking, answer, tool calls, logs and usage arrive while agy is still working.
 
-It implements the same loop as the **agy-delegate skill** — you write the brief, agy types in its
-own conversation, you review and land the result — but replaces the skill's "run a command and poll
+It implements the same loop as the **delegate skills it bundles** — you write the brief, the CLI types
+in its own conversation, you review and land the result — but replaces the skills' "run a command and poll
 `result.json`" dispatch with a streamed one, because `--print` alone only tells you the answer once
 the run is over.
 
@@ -62,15 +62,17 @@ Optional keys on the plugin's row in `cordis.patch.yml`:
 
 ## Bundled skill
 
-The plugin ships the `agy-delegate` skill, so `/agy-delegate` works without the skill being
-installed: `skills/agy-delegate/` holds a verbatim copy of upstream (SKILL.md, the four reference
-documents and `scripts/relay.mjs`) and the host half registers it with the `skills` service, pointing
-`resourceBase` at that directory so the references and the relay resolve. Upstream is delegate-skills
-by Ahmed Mohammed (amElnagdy), MIT — see `skills/agy-delegate/UPSTREAM.md`. The only difference from
-upstream is a short "In this install" note appended to the text an agent reads; `SKILL.md` on disk
-stays byte-identical, so re-copying it from upstream is a plain file copy.
+The plugin ships one skill per backend — `agy-sub-agent` for the Antigravity CLI and
+`open-code-subagent` for OpenCode — so `/agy-sub-agent` and `/open-code-subagent` work without a
+separate skill install. `skills/agy-sub-agent/` and `skills/open-code-subagent/` each hold a verbatim
+copy of upstream (SKILL.md, the four reference documents and `scripts/relay.mjs`), and the host half
+registers both with the `skills` service, pointing `resourceBase` at that directory so the references
+and the relay resolve. Upstream is delegate-skills by Ahmed Mohammed (amElnagdy), MIT, pinned at commit
+`3aa72d6` — see each bundle's `UPSTREAM.md`. The only difference from upstream is a short "In this
+install" note generated from the adapter's descriptor and appended to the text an agent reads; each
+`SKILL.md` on disk stays byte-identical, so re-copying it from upstream is a plain file copy.
 
-If the profile has no `skills` service the registration is skipped with a warning and everything else
+If the profile has no `skills` service the registrations are skipped with a warning and everything else
 still works; if the user has their own copy installed, that copy wins the name, which is the point of
 letting a user override a plugin.
 

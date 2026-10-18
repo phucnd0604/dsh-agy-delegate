@@ -77,13 +77,17 @@ check('both agent tools mounted', tools.has('delegate') && tools.has('delegate_t
 check('the widget routes mounted', routes.size === 5, [...routes.keys()].join(', '));
 check('no mount warnings', warnings.length === 0, warnings.join(' | '));
 
-const skill = skills[0];
-check('the bundled skill registered with the skills service', skill !== undefined && skill.name === 'agy-delegate');
-check('it points resourceBase at the shipped directory',
-  skill?.resourceBase?.kind === 'directory' && skill.resourceBase.path.endsWith(join('skills', 'agy-delegate')),
-  skill?.resourceBase?.path);
-check('its body carries the install note', skill?.content.includes('## In this install (dsh-delegate)') === true);
-check('it stays model- and user-invocable', skill?.invocation?.modelInvocable === true && skill?.invocation?.userInvocable === true);
+const skillNames = skills.map((skill) => skill.name).sort().join(',');
+check('both bundled skills registered with the skills service',
+  skillNames === 'agy-sub-agent,open-code-subagent', skillNames);
+check('each skill points resourceBase at its shipped directory',
+  skills.length > 0 && skills.every((skill) => skill.resourceBase?.kind === 'directory'
+    && skill.resourceBase.path.endsWith(join('skills', skill.name))),
+  skills.map((skill) => skill.resourceBase?.path).join(' | '));
+check('each body carries the install note',
+  skills.every((skill) => skill.content.includes('## In this install (dsh-delegate)') === true));
+check('they stay model- and user-invocable',
+  skills.every((skill) => skill.invocation?.modelInvocable === true && skill.invocation?.userInvocable === true));
 
 // --- the routes are the widget's contract -----------------------------------
 const call = async (path, req) => {
