@@ -143,6 +143,40 @@ test('auto: false is honoured on a build run', () => {
   assert.equal(plan.argv[plan.argv.indexOf('--agent') + 1], 'build');
 });
 
+test('config-level auto: false turns the dial off; an explicit option still wins', () => {
+  const off = descriptor.buildArgv(task({ config: { auto: false } }));
+  assert.equal(off.argv.includes('--auto'), false);
+
+  const on = descriptor.buildArgv(task({ config: { auto: false }, options: { auto: true } }));
+  assert.equal(on.argv.includes('--auto'), true, 'the dispatch option beats the config default');
+
+  const readOnly = descriptor.buildArgv(task({ config: { auto: true }, readOnly: true }));
+  assert.equal(readOnly.argv.includes('--auto'), false, 'read-only is never auto-approved');
+});
+
+test('config-level auto reaches the adapter through the registry', async () => {
+  const seen = [];
+  const wrapped = {
+    ...descriptor,
+    bin: process.execPath,
+    buildArgv(task) {
+      seen.push(task.config.auto);
+      seen.push(descriptor.buildArgv(task).argv.includes('--auto'));
+      return { argv: ['-e', 'process.stdout.write("ok")'], env: {} };
+    },
+  };
+  const home = mkdtempSync(join(tmpdir(), 'delegate-auto-'));
+  const work = mkdtempSync(join(tmpdir(), 'delegate-auto-work-'));
+  const registry = createRegistry({
+    home,
+    backends: createBackends({ config: { backends: { opencode: { auto: false } } }, descriptors: [wrapped] }),
+    log: () => {},
+  });
+  await registry.wait(registry.start({ brief: 'x', model: 'm', cd: work }).id, 20_000);
+  assert.equal(seen[0], false, 'the merged config reaches the adapter');
+  assert.equal(seen[1], false, 'and the real argv drops --auto');
+});
+
 test('resume is one of continue or an explicit session, never both', () => {
   const session = descriptor.buildArgv(task({ options: { session: 'ses_abc' } }));
   const at = session.argv.indexOf('--session');

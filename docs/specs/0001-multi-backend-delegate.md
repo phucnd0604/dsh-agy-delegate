@@ -76,7 +76,7 @@ export const descriptor = {
   factsAfterRun(task, stream) { /* fills ids/usage/answer only this CLI carries */ },
   answerOf(steps) { /* -> the answer text the row shows */ },
 
-  // Optional: read flat config keys from before the seam (agy does; #9 removes it).
+  // Optional: read flat config keys from before the seam (agy does; still honoured — see 5.5).
   legacyConfig(config) { /* -> partial config */ },
 };
 // parseEvent(line, task) from the first sketch is createStream() in the shipped
@@ -154,7 +154,7 @@ Route family `/api/delegate/*`: `probe`, `tasks`, `task`, `kill`, `dismiss` (loo
   maxConcurrent: 4,                       // shared across backends: it is machine load, not a CLI limit
   backends: {
     agy:      { path: 'agy', printTimeout: '30m', skipPermissions: true, projectsDir: undefined, reuseProjects: undefined },
-    opencode: { path: 'opencode', auto: true, defaultModel: undefined },
+    opencode: { path: 'opencode', printTimeout: '30m', auto: true, defaultModel: undefined },
   },
 }
 ```

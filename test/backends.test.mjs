@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -33,13 +33,14 @@ test('the bundle ships agy as the default and opencode beside it', () => {
 
 test('per-backend config beats the legacy flat keys, which beat the defaults', () => {
   const legacy = createBackends({
-    config: { agyPath: 'C:\\tools\\agy.exe', printTimeout: '10m', skipPermissions: false, projectsDir: 'C:\\projects' },
+    config: { agyPath: 'C:\\tools\\agy.exe', printTimeout: '10m', skipPermissions: false, projectsDir: 'C:\\projects', reuseProjects: false },
   });
   const resolved = legacy.get('agy').config;
   assert.equal(resolved.path, 'C:\\tools\\agy.exe');
   assert.equal(resolved.printTimeout, '10m');
   assert.equal(resolved.skipPermissions, false);
   assert.equal(resolved.projectsDir, 'C:\\projects');
+  assert.equal(resolved.reuseProjects, false);
 
   const nested = createBackends({
     config: { agyPath: 'C:\\tools\\agy.exe', backends: { agy: { printTimeout: '5m' } } },
@@ -57,6 +58,16 @@ test('probe reports observed health and never throws', () => {
   assert.equal(probed.id, 'agy');
   assert.equal(typeof probed.found, 'boolean');
   assert.equal(probed.models, null);
+});
+
+test('agy.probe follows a Windows shim to the exe it forwards to', () => {
+  if (process.platform !== 'win32') return;
+  const dir = mkdtempSync(join(tmpdir(), 'delegate-probe-shim-'));
+  const shim = join(dir, 'agy.cmd');
+  writeFileSync(shim, `@"${process.execPath}" %*\r\n`, 'utf8');
+  const observed = agy.probe({ bin: shim });
+  assert.equal(observed.found, true);
+  assert.match(String(observed.version), /^v\d+/);
 });
 
 // ------------------------------------------------------------------- agy argv
@@ -271,6 +282,31 @@ test('config-level skipPermissions reaches the adapter, not just the merged conf
   await on.wait(on.start({ brief: 'x', cd: work }).id, 20_000);
   assert.equal(seen[1], true, 'full access stays the default');
 });
+
+test('legacy flat keys still dispatch: agyPath reaches spawn as config.path', async () => {
+  const seen = [];
+  const base = fakeBackend();
+  const descriptor = {
+    ...base,
+    legacyConfig: agy.legacyConfig,
+    buildArgv(task) {
+      seen.push(task.config.path);
+      return base.buildArgv(task);
+    },
+  };
+  const home = mkdtempSync(join(tmpdir(), 'delegate-legacy-'));
+  const work = mkdtempSync(join(tmpdir(), 'delegate-legacy-work-'));
+  const registry = createRegistry({
+    home,
+    backends: createBackends({ config: { agyPath: process.execPath }, descriptors: [descriptor] }),
+    log: () => {},
+  });
+  const row = registry.start({ brief: 'x', cd: work });
+  const settled = await registry.wait(row.id, 20_000);
+  assert.equal(seen[0], process.execPath, 'the flat key lands in the merged config');
+  assert.equal(settled.status, 'done', 'and the run really spawned through config.path');
+});
+
 test('the core refuses a registry with no backends', () => {
   assert.throws(() => createRegistry({ home: tmpdir() }), /needs a backend registry/);
 });
