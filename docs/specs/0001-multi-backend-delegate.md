@@ -28,7 +28,7 @@ and more CLIs later, without touching the core each time.
 
 ## 4. Domain vocabulary
 
-Terms live in [../GLOSSARY.md](../GLOSSARY.md): **backend**, **backend adapter**, **brief**, **dispatch**,
+Terms live in [../../lib/GLOSSARY.md](../../lib/GLOSSARY.md): **backend**, **backend adapter**, **brief**, **dispatch**,
 **implementer**, **orchestrator**, **step**, **task**, **transcript**, **widget**, **capability**.
 
 ## 5. Architecture
