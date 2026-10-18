@@ -163,12 +163,12 @@ The routes the widget reads and drives are the loopback-only, origin-checked fam
 `/api/delegate/probe`, `/api/delegate/tasks`, `/api/delegate/task`, `/api/delegate/kill` and
 `/api/delegate/dismiss`.
 
-## Upgrade note: 0.1.0 → 0.2.0
+## Upgrade note: from the dsh-agy-delegate plugin
 
 The second backend renamed the package and moved the agy config under `backends`. Nothing keeps the
 old tool names, so update anything that used them:
 
-| 0.1.0 | 0.2.0 |
+| before (dsh-agy-delegate) | now (dsh-delegate) |
 | --- | --- |
 | package `dsh-agy-delegate`, plugin id `agy-delegate` | `dsh-delegate`, plugin id `delegate` |
 | routes `/api/agy-delegate/*` | `/api/delegate/*` |

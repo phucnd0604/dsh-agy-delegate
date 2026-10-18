@@ -1,6 +1,6 @@
 {
   "name": "dsh-delegate",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "dsh plugin: delegate a brief to a coding-agent CLI as a background task, with a floating GUI widget showing live thinking, answer and tool calls",
   "type": "module",
   "main": "lib/index.js",

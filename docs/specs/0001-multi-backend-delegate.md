@@ -249,7 +249,7 @@ by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `c
 | config `agyPath`, `printTimeout`, `skipPermissions`, … | `backends.agy.*` (old keys still honoured) |
 | GitHub repo `phucnd0604/dsh-agy-delegate` | `phucnd0604/dsh-delegate` (already renamed) |
 
-Version 0.1.0 → 0.2.0. No compatibility shims for the old tool names (single user, 0.1.0); the old flat config
+The renamed package ships its first public release as 0.1.0 (the dsh-agy-delegate line is retired). No compatibility shims for the old tool names (single user, 0.1.0); the old flat config
 keys are the one exception, kept because a live install may be running with them.
 
 ## 11. Risks
