@@ -42,23 +42,33 @@ const plugin = captured.factory((specifier) => {
   throw new Error(`unexpected require: ${specifier}`);
 });
 
-/** Every string in the element tree, resolving function components. */
-function texts(node, out = []) {
-  if (node === null || node === undefined || typeof node === 'boolean') return out;
+/** Walk the element tree, resolving function components; visit strings and elements. */
+function walk(node, visit) {
+  if (node === null || node === undefined || typeof node === 'boolean') return;
   if (typeof node === 'string' || typeof node === 'number') {
-    out.push(String(node));
-    return out;
+    visit(String(node));
+    return;
   }
   if (Array.isArray(node)) {
-    for (const child of node) texts(child, out);
-    return out;
+    for (const child of node) walk(child, visit);
+    return;
   }
   if (typeof node.type === 'function') {
-    texts(node.type(node.props), out);
-    return out;
+    walk(node.type(node.props), visit);
+    return;
   }
   assert.equal(typeof node.type, 'string', `element type must be a tag or component, got ${String(node.type)}`);
-  return texts(node.props?.children, out);
+  visit(node);
+  walk(node.props?.children, visit);
+}
+
+/** Every string in the element tree. */
+function texts(node) {
+  const out = [];
+  walk(node, (item) => {
+    if (typeof item === 'string') out.push(item);
+  });
+  return out;
 }
 
 /** Every string in the element tree, joined — substring checks read naturally. */
@@ -66,10 +76,22 @@ function flat(node) {
   return texts(node).join('\n');
 }
 
+/** Every element carrying a class, resolving function components. */
+function byClass(node, name) {
+  const out = [];
+  walk(node, (item) => {
+    if (typeof item === 'string') return;
+    if (typeof item.props?.className === 'string' && item.props.className.split(' ').includes(name)) out.push(item);
+  });
+  return out;
+}
+
 /** A finished task, with an input and an output. */
 function richTask() {
   return {
     id: 'agy-1',
+    backend: 'agy',
+    backendLabel: 'Antigravity CLI',
     status: 'done',
     brief: 'Fix the number field so 11789480 renders as 11.789.480',
     cd: 'C:/repo',
@@ -88,6 +110,8 @@ function richTask() {
 function bareTask() {
   return {
     id: 'agy-2',
+    backend: 'agy',
+    backendLabel: 'Antigravity CLI',
     status: 'running',
     brief: '',
     cd: 'C:/repo',
@@ -98,6 +122,11 @@ function bareTask() {
     answer: '',
     error: null,
   };
+}
+
+/** A second backend's task, so both badges show side by side. */
+function opencodeTask() {
+  return { ...richTask(), id: 'opencode-7', backend: 'opencode', backendLabel: 'OpenCode CLI' };
 }
 
 /** The props every Panel/TaskList call needs. */
@@ -144,20 +173,31 @@ test('the collapsed pill says what is running', () => {
   assert.ok(running.includes('agy'));
   assert.ok(running.includes('1 running'));
   // The count is announced as a sentence, not a bare number.
-  assert.ok(running.includes('1 of 1 agy tasks running'));
+  assert.ok(running.includes('1 running (1 agy)'));
 
   const two = flat(plugin.Pill({ ...surface({ tasks: [richTask(), richTask()], running: 0 }), onClick: () => {} }));
   assert.ok(two.includes('2 tasks'));
-  assert.ok(two.includes('2 agy tasks, none running'));
+  assert.ok(two.includes('2 tasks (2 agy), none running'));
 
   const one = flat(plugin.Pill({ ...surface({ tasks: [richTask()], running: 0 }), onClick: () => {} }));
   assert.ok(one.includes('1 task'));
 });
 
+test('two backends show side by side, each row badged, with no per-backend branch', () => {
+  const tasks = [richTask(), opencodeTask()];
+  const badges = byClass(plugin.TaskList(surface({ tasks })), 'agd-badge');
+  assert.deepEqual(badges.map((node) => node.props.children), ['agy', 'opencode'], 'one badge per row, in task order');
+
+  assert.equal(plugin.announce(tasks), '2 tasks (1 agy, 1 opencode), none running');
+  const live = tasks.map((task) => ({ ...task, status: 'running' }));
+  assert.equal(plugin.announce(live), '2 running (1 agy, 1 opencode)');
+  assert.equal(plugin.announce([]), 'No delegate tasks');
+});
+
 test('the widget is always mounted, with an empty list before anything runs', () => {
   const first = plugin.AgyWidget({});
   assert.notEqual(first, null);
-  assert.ok(flat(first).includes('agy'));
+  assert.ok(flat(first).includes('delegate'));
 
   const empty = flat(plugin.Pill({ ...surface(), onClick: () => {} }));
   assert.ok(empty.includes('0 tasks'));

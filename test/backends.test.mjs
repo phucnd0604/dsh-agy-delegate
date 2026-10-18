@@ -54,10 +54,50 @@ test('per-backend config beats the legacy flat keys, which beat the defaults', (
 });
 
 test('probe reports observed health and never throws', () => {
-  const [probed] = createBackends({ config: {} }).probe();
+  // Pinned to paths that do not exist, so this stays fast and deterministic on
+  // every machine (a found opencode would spawn a model listing).
+  const [probed] = createBackends({
+    config: { backends: { agy: { path: 'definitely-not-an-agy-cli-xyz' }, opencode: { path: 'definitely-not-an-opencode-cli-xyz' } } },
+  }).probe();
   assert.equal(probed.id, 'agy');
-  assert.equal(typeof probed.found, 'boolean');
+  assert.equal(probed.found, false);
   assert.equal(probed.models, null);
+});
+
+test('probe fills models for a found adapter that can list them (spec 5.4)', () => {
+  const capable = {
+    ...fakeBackend(),
+    capabilities: { modelList: true },
+    probe: () => ({ found: true, version: 'fake 1.0' }),
+    listModels: () => ['provider/model-a', 'provider/model-b'],
+  };
+  const [probed] = createBackends({ config: {}, descriptors: [capable] }).probe();
+  assert.equal(probed.found, true);
+  assert.deepEqual(probed.models, ['provider/model-a', 'provider/model-b']);
+
+  // A capable adapter that is absent is never asked to enumerate anything.
+  let asked = 0;
+  const absent = {
+    ...fakeBackend(),
+    capabilities: { modelList: true },
+    probe: () => ({ found: false, version: null }),
+    listModels: () => { asked += 1; return ['provider/nope']; },
+  };
+  assert.equal(createBackends({ config: {}, descriptors: [absent] }).probe()[0].models, null);
+  assert.equal(asked, 0, 'a missing CLI is not spawned for a model list');
+
+  // An adapter with no modelList capability stays null even when found.
+  const incapable = { ...fakeBackend(), capabilities: {}, probe: () => ({ found: true, version: 'fake 1.0' }) };
+  assert.equal(createBackends({ config: {}, descriptors: [incapable] }).probe()[0].models, null);
+
+  // A throwing listModels cannot take the health route down.
+  const broken = {
+    ...fakeBackend(),
+    capabilities: { modelList: true },
+    probe: () => ({ found: true, version: 'fake 1.0' }),
+    listModels: () => { throw new Error('no listing'); },
+  };
+  assert.equal(createBackends({ config: {}, descriptors: [broken] }).probe()[0].models, null);
 });
 
 test('agy.probe follows a Windows shim to the exe it forwards to', () => {

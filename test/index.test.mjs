@@ -60,3 +60,30 @@ test('the default mounts both tools, the five routes and both skills', () => {
   assert.equal(mounted.routes.size, 5);
   assert.deepEqual(mounted.skills.map((skill) => skill.name).sort(), ['agy-sub-agent', 'open-code-subagent']);
 });
+
+test('the probe route reports enabled and every registered backend', () => {
+  // Missing paths make the probe cheap and deterministic: found stays false,
+  // but the route still has to list both backends with the spec's shape.
+  const mounted = mount({ backends: { agy: { path: 'not-a-real-agy-cli-xyz' }, opencode: { path: 'not-a-real-opencode-cli-xyz' } } });
+  const route = mounted.routes.get('/api/delegate/probe');
+  assert.ok(route, 'the probe route is mounted');
+
+  let status;
+  let payload;
+  route.handler(
+    { method: 'GET', socket: { remoteAddress: '127.0.0.1' }, headers: { host: '127.0.0.1:63390' } },
+    { writeHead(code) { status = code; }, end(text) { payload = JSON.parse(text); } },
+  );
+
+  assert.equal(status, 200);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.enabled, true);
+  assert.deepEqual(payload.backends.map((backend) => backend.id), ['agy', 'opencode']);
+  for (const backend of payload.backends) {
+    assert.equal(backend.found, false, 'the fake path is not on disk');
+    assert.equal(backend.version, null);
+    assert.equal(backend.models, null);
+    assert.equal(typeof backend.error, 'string');
+  }
+  assert.ok(Array.isArray(payload.skills), 'skills still ride along');
+});
