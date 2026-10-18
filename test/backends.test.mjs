@@ -20,12 +20,14 @@ import { makeStep } from '../lib/step.js';
 
 // ---------------------------------------------------------------- the registry
 
-test('the bundle ships agy as the default backend', () => {
+test('the bundle ships agy as the default and opencode beside it', () => {
   const backends = createBackends({ config: {} });
-  assert.deepEqual(backends.ids(), ['agy']);
+  assert.deepEqual(backends.ids(), ['agy', 'opencode']);
   assert.deepEqual(backends.ids(), BUNDLED_BACKENDS.map((entry) => entry.id));
+  // agy comes first, so an unnamed dispatch keeps using it until #4.
   assert.equal(backends.defaultId(), 'agy');
   assert.equal(backends.get('agy').descriptor.label, 'Antigravity CLI');
+  assert.equal(backends.get('opencode').descriptor.label, 'OpenCode CLI');
   assert.equal(backends.get('nope'), null);
 });
 
@@ -238,7 +240,7 @@ test('dispatching to a backend nobody installed is refused, not guessed', () => 
     backends: createBackends({ config: {} }),
     log: () => {},
   });
-  assert.throws(() => registry.start({ backend: 'opencode', brief: 'x', cd: process.cwd() }), /unknown backend "opencode"; installed: agy/);
+  assert.throws(() => registry.start({ backend: 'claude', brief: 'x', cd: process.cwd() }), /unknown backend "claude"; installed: agy, opencode/);
 });
 
 test('the core refuses a registry with no backends', () => {

@@ -183,10 +183,12 @@ by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `c
 
 ## 7. Backend: opencode (new)
 
-- **Spawn:** `opencode run --format json [--session <id> | --continue] --agent <build|plan> --model <provider/model>[#variant] [--auto] [--pure]`
+- **Spawn:** `opencode run --format json [--session <id> | --continue] --agent <build|plan> --model <provider/model>[#variant] [--auto]`
   with the brief piped on **stdin** (no argv quoting issues for multi-line, XML-tagged briefs); working
-  directory = `cd`; events are JSON lines on stdout.
-- **Model policy:** `modelRequired: true`. Missing model → refusal listing `opencode models` filtered to
+  directory = `cd`; events are JSON lines on stdout. `--pure` is emitted only when the installed CLI
+  advertises it — 2.0.32 does not, so it is not sent (an unknown flag would fail every dispatch).
+- **Model policy:** `modelRequired: true`; the refusal happens in the runner before spawning, so a missing
+  model never starts a process. Missing model → refusal listing `opencode models` filtered to
   `/-free$/` first (11 today: `opencode/beam-free`, `opencode/deepseek-v4.1-flash-free`,
   `opencode/glm-5.3-flash-free`, `opencode/nemotron-3.5-lightning-free`, …), then the `opencode-go/*`
   subscription models; never auto-picked. `config.backends.opencode.defaultModel` is an explicit opt-in.
@@ -196,7 +198,8 @@ by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `c
   honours the agent's own permission config.
 - **Resume:** session id is captured from the event stream into a `session` step; `options.resumeLast` →
   `--continue`, `options.session` → `--session <id>`.
-- **Cost:** the `cost` step is populated when the stream reports it.
+- **Cost:** the `cost` step is populated when the stream reports it — one step summed across the run's
+  `step_finish` events (a free model reports `0`, which is a real cost, not a missing one).
 - **Windows:** the CLI on PATH is a `.ps1`/`.cmd` shim next to `opencode.exe`; spawn the resolved executable
   without a shell, and cover it with a test.
 
