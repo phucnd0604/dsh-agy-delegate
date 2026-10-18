@@ -3,9 +3,9 @@
  * 5.1, run against every descriptor in lib/backends/.
  *
  * Adapters are discovered from the directory, so a new lib/backends/<id>.js is
- * put under every check below with no edit to this file. Registering it is a
- * separate line in lib/backends/registry.js, and the first test says so
- * explicitly rather than letting an unregistered file pass unnoticed. A
+ * put under every check below with no edit to this file. The registry discovers
+ * its bundle from the same directory; the first test scans independently and
+ * fails if the two disagree. A
  * deliberately broken parser or a throwing probe fails here instead of in a
  * user's run.
  *
@@ -36,9 +36,14 @@ const EXPECTED_FIXTURE = '-run.expected.json';
  * exports-a-descriptor rule skips them instead of a hardcoded name list.
  */
 const adapters = [];
+const unloadable = [];
 for (const file of readdirSync(BACKENDS_DIR).filter((name) => name.endsWith('.js')).sort()) {
-  const module = await import(pathToFileURL(join(BACKENDS_DIR, file)).href);
-  if (module.descriptor !== undefined) adapters.push({ file, descriptor: module.descriptor });
+  try {
+    const module = await import(pathToFileURL(join(BACKENDS_DIR, file)).href);
+    if (module.descriptor != null) adapters.push({ file, descriptor: module.descriptor });
+  } catch (error) {
+    unloadable.push({ file, error });
+  }
 }
 
 const scratch = mkdtempSync(join(tmpdir(), 'dsh-delegate-contract-'));
@@ -87,14 +92,19 @@ function contradictory(schema) {
   return { not: 'a value' };
 }
 
-test('every registered adapter has a file, and every file is registered', () => {
+test('every file in lib/backends can be imported', () => {
+  const named = unloadable.map(({ file, error }) => file + ': ' + String(error?.message ?? error));
+  assert.deepEqual(named, [], 'the registry skips an unimportable file, so the adapter would vanish from the bundle');
+});
+
+test('the registry lists every descriptor file in lib/backends, and nothing else', () => {
   assert.ok(BUNDLED_BACKENDS.length > 0, 'no bundled backends registered');
   const discovered = adapters.map((entry) => entry.descriptor.id).sort();
   const registered = BUNDLED_BACKENDS.map((descriptor) => descriptor.id).sort();
   assert.deepEqual(
     discovered,
     registered,
-    'lib/backends and BUNDLED_BACKENDS disagree; a new adapter is registered in lib/backends/registry.js',
+    'lib/backends and BUNDLED_BACKENDS disagree; the registry must discover every descriptor file',
   );
   assert.equal(new Set(registered).size, registered.length, 'duplicate adapter ids');
 });
