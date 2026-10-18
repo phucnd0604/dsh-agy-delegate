@@ -73,7 +73,7 @@ const ctx = {
 
 apply(ctx, { agyPath: 'agy' });
 
-check('both agent tools mounted', tools.has('agy_delegate') && tools.has('agy_task'), [...tools.keys()].join(', '));
+check('both agent tools mounted', tools.has('delegate') && tools.has('delegate_task'), [...tools.keys()].join(', '));
 check('the widget routes mounted', routes.size === 5, [...routes.keys()].join(', '));
 check('no mount warnings', warnings.length === 0, warnings.join(' | '));
 
@@ -102,15 +102,15 @@ const wrongMethod = await call('/api/delegate/tasks', request('/api/delegate/tas
 check('a write to a read route is refused', wrongMethod.status === 405, `status ${wrongMethod.status}`);
 
 // --- a real dispatch through the tool, then read it through the routes -------
-const started = await tools.get('agy_delegate').execute({
+const started = await tools.get('delegate').execute({
   brief: 'Use the run_command tool to run the command `Get-ChildItem` in the current directory, then reply with exactly: host-ok',
   cd: work,
-  printTimeout: '150s',
+  options: { printTimeout: '150s' },
   background: false,
   waitSeconds: 200,
 });
 check('the tool dispatched a real agy task', started.task?.id !== undefined && started.task?.status !== 'failed', `${started.task?.id} ${started.task?.status}`);
-check('the run used full access by default', started.task?.steps?.some((step) => step.toolName === 'run_command') === true,
+check('the run used full access by default', started.task?.steps?.some((step) => step.kind === 'tool' && step.name === 'run_command') === true,
   'run_command executed, which needs auto-approved permissions');
 check('the answer came back through the tool', String(started.message).includes('host-ok') || started.task?.answer?.includes('host-ok') === true);
 check('a fresh project was opened for the new root', started.task?.reusedProject === false && typeof started.task?.projectId === 'string');
@@ -125,21 +125,21 @@ const steps = detail.json.task.steps ?? [];
 check('the detail route returns the folded steps', detail.status === 200 && steps.length >= 2, `${steps.length} steps`);
 check('thinking/answer/tool data survive the round trip',
   steps.some((step) => typeof step.text === 'string' && step.text.includes('host-ok'))
-  && steps.some((step) => step.toolName !== undefined));
+  && steps.some((step) => step.kind === 'tool'));
 
 // --- the second dispatch at the same root must join that project -------------
-const second = await tools.get('agy_delegate').execute({
+const second = await tools.get('delegate').execute({
   brief: 'Reply with exactly: reuse-ok. Do not use any tools.',
   cd: work,
-  printTimeout: '150s',
+  options: { printTimeout: '150s' },
   background: false,
   waitSeconds: 200,
 });
 check('the second dispatch reused the project', second.task?.reusedProject === true && second.task?.projectId === started.task.projectId,
   `first ${started.task?.projectId} vs second ${second.task?.projectId}`);
 
-const status = await tools.get('agy_task').execute({ action: 'list' });
-check('agy_task lists every task', status.tasks?.length === 2, `${status.tasks?.length} tasks`);
+const status = await tools.get('delegate_task').execute({ action: 'list' });
+check('delegate_task lists every task', status.tasks?.length === 2, `${status.tasks?.length} tasks`);
 
 for (const dispose of disposers.reverse()) dispose();
 check('teardown unregistered the skill', skills.length === 0, `${skills.length} left`);

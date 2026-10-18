@@ -290,7 +290,7 @@ test('the drawer stays between the window header and the status bar', () => {
 });
 
 test('the list renders every task and the calm empty state', () => {
-  assert.ok(flat(plugin.TaskList(surface())).includes('No agy tasks yet'));
+  assert.ok(flat(plugin.TaskList(surface())).includes('No delegate tasks yet'));
   const two = flat(plugin.TaskList(surface({ tasks: [richTask(), bareTask()] })));
   assert.ok(two.includes('agy-1') && two.includes('agy-2'));
   assert.ok(two.includes('done · 3s') && two.includes('running · '));

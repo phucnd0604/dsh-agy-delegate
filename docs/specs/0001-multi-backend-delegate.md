@@ -54,6 +54,7 @@ export const descriptor = {
     readOnly: 'plan-agent',       // how "look but do not edit" is expressed
     resume: ['resumeLast', 'session'],
     auto: true,                   // has an auto-approve dial
+    fullAccessOption: 'auto',     // the options key that means "full access"; refused with readOnly
   },
   defaults: { /* config keys this backend always needs */ },
   optionsSchema: { /* JSON Schema for the per-backend "options" bag */ },
@@ -61,6 +62,7 @@ export const descriptor = {
   // Health and identity: observed facts, never configuration.
   probe({ bin }) { /* -> { found, version, models, error? }, never throws */ },
   listModels({ bin }) { /* -> string[] | null, never throws */ },
+  modelRefusal(models) { /* -> the missing-model refusal text, free ids first */ },
   describeModel(model) { /* -> short label for the widget row, optional */ },
 
   // One dispatch: build the command, then judge and describe the run.
@@ -116,15 +118,19 @@ Two tools, regardless of how many backends exist:
 
 - `delegate { backend, brief, cd?, model?, readOnly?, background?, waitSeconds?, options? }` — `backend` is an
   enum generated from the installed adapters; `options` is the per-backend bag validated against that
-  adapter's `optionsSchema` (agy: `effort`, `project`, `conversation`, `sandbox`, `addDirs`,
-  `printTimeout`, `newProject`, `skipPermissions`; opencode: `agent`, `variant`, `auto`, `session`, `pure`).
+  adapter's `optionsSchema`, which is the source of truth for its keys (agy: `effort`, `project`,
+  `conversation`, `resumeLast`, `newProject`, `sandbox`, `addDirs`, `printTimeout`, `skipPermissions`,
+  `projectsDir`, `reuseProjects`; opencode: `agent`, `resumeLast`, `session`, `auto`, `standalone`, `timeout`).
 - `delegate_task { action: list | status | detail | wait | kill | dismiss, id?, waitSeconds? }` — task ids are
   unique across backends, so one control surface suffices.
 
 Refusal rules (all return `{ ok: false, message }` without dispatching): empty brief; unknown backend;
-unknown key in `options`; `model` missing on a backend whose `capabilities.modelRequired` is true (the message
-lists free models first, then the rest, capped at 10, from a live `listModels()` call); `readOnly` combined
-with an explicit full-access request; dispatch past the concurrency ceiling.
+an unknown key in `options`, or a value that contradicts its declared type or enum (validated in `lib/tools.js`
+against the chosen adapter's `optionsSchema`, and named in
+the message); `model` missing on a backend whose `capabilities.modelRequired` is true (the message lists free
+models first, then the rest, from a live `listModels()` call); `readOnly` combined with an explicit full-access
+request (`options[capabilities.fullAccessOption] === true`); dispatch past the concurrency ceiling (the
+runner's, because it is machine load).
 
 ### 5.4 Routes and probe
 
@@ -187,8 +193,8 @@ by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `c
   with the brief piped on **stdin** (no argv quoting issues for multi-line, XML-tagged briefs); working
   directory = `cd`; events are JSON lines on stdout. `--pure` is emitted only when the installed CLI
   advertises it — 2.0.32 does not, so it is not sent (an unknown flag would fail every dispatch).
-- **Model policy:** `modelRequired: true`; the refusal happens in the runner before spawning, so a missing
-  model never starts a process. Missing model → refusal listing `opencode models` filtered to
+- **Model policy:** `modelRequired: true`; the `delegate` tool refuses a model-less dispatch before the runner
+  sees it (the runner keeps the same gate as the last line of defence), so a missing model never starts a process. Missing model → refusal listing `opencode models` filtered to
   `/-free$/` first (11 today: `opencode/beam-free`, `opencode/deepseek-v4.1-flash-free`,
   `opencode/glm-5.3-flash-free`, `opencode/nemotron-3.5-lightning-free`, …), then the `opencode-go/*`
   subscription models; never auto-picked. `config.backends.opencode.defaultModel` is an explicit opt-in.
@@ -219,7 +225,8 @@ by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `c
 - Fixture-driven parser tests: recorded agy NDJSON and recorded opencode event JSON → expected steps.
 - Config compatibility test: old flat keys still map to `backends.agy`.
 - Widget render test: two backends side by side, badge and count.
-- `test/tools.test.mjs`: refusal messages for unknown backend, missing model, unknown option, ceiling.
+- `test/tools.test.mjs`: refusal messages for unknown backend, missing model, unknown option, an option value
+  that contradicts its schema, and shared-field shadowing; the concurrency ceiling is pinned in `test/runner.test.mjs`.
 
 ## 10. Migration and breaking changes
 

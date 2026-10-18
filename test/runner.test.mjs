@@ -17,7 +17,7 @@ test('refuses to start past the concurrency ceiling', () => {
 
   const atCeiling = concurrencyRefusal(4, 4);
   assert.match(atCeiling, /maxConcurrent 4/);
-  assert.match(atCeiling, /agy_task/);
+  assert.match(atCeiling, /delegate_task/);
 
   assert.match(concurrencyRefusal(6, 4), /^6 tasks are already running/);
   assert.equal(DEFAULT_MAX_CONCURRENT, 4);

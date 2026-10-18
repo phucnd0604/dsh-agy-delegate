@@ -47,8 +47,8 @@ test('the body keeps upstream intact and adds the install note', () => {
   assert.ok(skill.content.includes('## The loop'), 'upstream sections survive');
 
   assert.ok(skill.content.includes('## In this install (dsh-delegate)'));
-  assert.ok(skill.content.includes('agy_delegate'), 'the note names the tool the widget watches');
-  assert.ok(skill.content.includes('agy_task'));
+  assert.match(skill.content, /`delegate \{ brief/, 'the note names the tool the widget watches');
+  assert.ok(skill.content.includes('delegate_task'));
   assert.ok(skill.content.includes('scripts/relay.mjs'), 'the relay path stays documented');
   assert.ok(skill.content.includes('touchedFiles'), 'and the reviewer knows what the tool path omits');
 });

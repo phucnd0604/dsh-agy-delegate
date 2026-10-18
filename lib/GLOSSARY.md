@@ -44,5 +44,5 @@ One entry in a transcript.
 _Avoid_: event, message, chunk
 
 **Capability**:
-A flag a backend adapter declares about itself — `modelRequired`, `modelList`, `readOnly` mapping, `resume` kinds, `auto` — so the core never hard-codes one CLI's quirks.
+A flag a backend adapter declares about itself — `modelRequired`, `modelList`, `readOnly` mapping, `resume` kinds, `auto`, `fullAccessOption` — so the core never hard-codes one CLI's quirks.
 _Avoid_: feature, flag

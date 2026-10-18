@@ -243,6 +243,34 @@ test('dispatching to a backend nobody installed is refused, not guessed', () => 
   assert.throws(() => registry.start({ backend: 'claude', brief: 'x', cd: process.cwd() }), /unknown backend "claude"; installed: agy, opencode/);
 });
 
+
+test('config-level skipPermissions reaches the adapter, not just the merged config', async () => {
+  const seen = [];
+  const descriptor = {
+    ...fakeBackend(),
+    buildArgv(task) {
+      seen.push(task.skipPermissions);
+      return { argv: ['-e', 'process.stdout.write("ok")'], env: {} };
+    },
+  };
+  const home = mkdtempSync(join(tmpdir(), 'delegate-skip-'));
+  const work = mkdtempSync(join(tmpdir(), 'delegate-work-'));
+  const off = createRegistry({
+    home,
+    backends: createBackends({ config: { backends: { fake: { skipPermissions: false } } }, descriptors: [descriptor] }),
+    log: () => {},
+  });
+  await off.wait(off.start({ brief: 'x', cd: work }).id, 20_000);
+  assert.equal(seen[0], false, 'an explicit opt-out is honoured');
+
+  const on = createRegistry({
+    home,
+    backends: createBackends({ config: {}, descriptors: [descriptor] }),
+    log: () => {},
+  });
+  await on.wait(on.start({ brief: 'x', cd: work }).id, 20_000);
+  assert.equal(seen[1], true, 'full access stays the default');
+});
 test('the core refuses a registry with no backends', () => {
   assert.throws(() => createRegistry({ home: tmpdir() }), /needs a backend registry/);
 });

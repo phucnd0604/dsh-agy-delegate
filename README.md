@@ -82,11 +82,11 @@ Two deliberate differences from the skill's relay lane:
   registry (`~/.gemini/config/projects/*.json`) and joins the project that already owns it. Repeated
   briefs against one repository therefore share its history and `--resume-last` stays meaningful,
   instead of scattering the repo across a project per dispatch. Only a root with no project gets a new
-  one; `newProject: true` forces that. `result.json` and the widget's detail line report which project
+  one; `options.newProject: true` (agy) forces that. `result.json` and the widget's detail line report which project
   the run joined.
 - **Runs use full access.** `--dangerously-skip-permissions` is passed by default, because headless
   agy cannot answer a permission prompt and a run without it dies on the first tool that needs one.
-  Scope the brief accordingly; `dangerouslySkipPermissions: false` requires pre-granted allow-rules,
+  Scope the brief accordingly; `options.skipPermissions: false` on agy requires pre-granted allow-rules,
   and `readOnly: true` still means sandboxed plus auto-approved inside the sandbox, with writes
   discarded.
 
@@ -96,14 +96,17 @@ The agent-facing tools:
 
 | Tool | What it does |
 | --- | --- |
-| `agy_delegate` | Dispatch a brief. Returns immediately with a task id (`background: false` blocks instead). |
-| `agy_task` | `list` / `status` / `detail` / `wait` / `kill` / `dismiss` — inspect and control tasks. |
+| `delegate` | Dispatch a brief to one installed backend. Returns immediately with a task id (`background: false` blocks instead). |
+| `delegate_task` | `list` / `status` / `detail` / `wait` / `kill` / `dismiss` — inspect and control tasks. |
 
-`agy_delegate` arguments mirror the skill's dispatch flags: `brief` (required), `cd`, `model`,
-`effort`, `readOnly` (agy sandbox + auto-approved tools inside it), `sandbox`,
-`dangerouslySkipPermissions` (default true — see "Dispatch semantics"), `newProject`, `printTimeout`,
-`addDirs`, `resumeLast`, `conversation`, `project`. `readOnly` plus an explicit
-`dangerouslySkipPermissions` is refused, exactly as in the skill.
+`delegate` takes `brief` (required), `backend`, `cd`, `model`, `readOnly`, `background`,
+`waitSeconds`, and a per-backend `options` bag (`agy`: `effort`, `project`, `conversation`,
+`resumeLast`, `newProject`, `sandbox`, `addDirs`, `printTimeout`, `skipPermissions`, `projectsDir`,
+`reuseProjects`; `opencode`: `agent`, `resumeLast`, `session`, `auto`, `standalone`, `timeout`).
+An unknown option key is refused by name, and so is a value that contradicts the option's declared
+type or enum. `readOnly` plus an explicit full-access option (`agy`: `skipPermissions`; `opencode`:
+`auto`) is refused. Which backends exist, and what each accepts, comes from the installed adapters —
+see `docs/specs/0001-multi-backend-delegate.md` §5.3.
 
 The widget always sits in the frame-wide `shell.overlay` layer: a pill showing the running count
 (`0 tasks` when idle), expanding into the task list — several delegations can be in flight, and the
