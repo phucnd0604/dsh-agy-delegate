@@ -27,10 +27,9 @@ test('a "done" that was silently denied is settled as a failure', () => {
   // Verbatim from a real run on this machine: the model asked for a command,
   // agy auto-denied it, the run still exited 0 and called itself SUCCESS.
   const deniedStep = {
-    stepIndex: 16,
-    stepType: 'tool',
-    state: 'ERROR',
-    toolName: 'run_command',
+    kind: 'tool',
+    name: 'run_command',
+    at: 0,
     error: {
       type: 'TOOL_ERROR',
       message: 'permission check failed for command "Get-ChildItem -Recurse mobile/test": '
@@ -53,10 +52,9 @@ test('a "done" that was silently denied is settled as a failure', () => {
 
   // An ordinary tool failure is not a denial and must not fail a good run.
   const invalidArgs = {
-    stepIndex: 4,
-    stepType: 'tool',
-    state: 'ERROR',
-    toolName: 'view_file',
+    kind: 'tool',
+    name: 'view_file',
+    at: 0,
     error: {
       type: 'TOOL_ERROR',
       message: 'declaring permissions: cortex tool view_file: convert tool call for permissions: model output invalid tool call error (invalid_args) failed to read file: The system cannot find the file specified.',

@@ -16,6 +16,7 @@ import test from 'node:test';
 import { descriptor as agy } from '../lib/backends/agy.js';
 import { BUNDLED_BACKENDS, createBackends } from '../lib/backends/registry.js';
 import { createRegistry } from '../lib/runner.js';
+import { makeStep } from '../lib/step.js';
 
 // ---------------------------------------------------------------- the registry
 
@@ -165,12 +166,11 @@ function fakeBackend() {
         push(line) {
           const text = line.trim();
           if (text === '') return [];
-          if (text.startsWith('!')) {
-            logs.push(text.slice(1));
-            return [{ kind: 'log', text: text.slice(1) }];
-          }
-          steps.push({ stepIndex: steps.length, stepType: 'agent_response', state: 'DONE', text, thinking: '', deltas: 1 });
-          return [{ kind: 'step', step: steps.at(-1) }];
+          const step = text.startsWith('!')
+            ? makeStep('log', { level: 'info', text: text.slice(1) })
+            : makeStep('answer', { text });
+          steps.push(step);
+          return [step];
         },
         steps() {
           return steps;
@@ -195,10 +195,6 @@ function fakeBackend() {
       task.conversationId = 'conv-fake';
       task.projectId = 'fake-project';
     },
-
-    answerOf(folded) {
-      return folded.map((step) => step.text).join('\n');
-    },
   };
 }
 
@@ -220,7 +216,8 @@ test('a fake backend runs end to end through the unmodified core', async () => {
   const detail = await registry.wait(row.id, 20_000);
   assert.equal(detail.status, 'done');
   assert.equal(detail.answer, 'hello\nworld');
-  assert.equal(detail.stepCount, 2);
+  // Two answers plus the CLI's own log line: the log is transcript too.
+  assert.equal(detail.stepCount, 3);
   assert.equal(detail.toolCalls, 0);
   assert.equal(detail.conversationId, 'conv-fake');
   assert.equal(detail.projectId, 'fake-project', 'adapter facts land on the row');

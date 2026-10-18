@@ -100,8 +100,15 @@ Every adapter parses its own event stream and emits the same `Step` shape, so th
 { kind: 'log',      level, text, at }
 ```
 
+`at` is epoch milliseconds. `usd` is null when the CLI reports tokens but no price (agy); `tokens`
+is that CLI's usage object. `level` is `debug | info | warn | error`. The union and its selectors
+(`answerOf`, `toolsOf`, `sessionOf`, `costOf`, `countsOf`, `summarizeSteps`, `trimSteps`) live in
+`lib/step.js`; `lib/parse.js` is only agy's fold onto it.
+
 A task row is `{ id, backend, status, startedAt, endedAt, model, cd, toolCalls, steps, answer, error, cost }`.
-`status` is one of `running | done | failed | timeout | killed` (unchanged).
+`status` is one of `running | done | failed | timeout | killed` (unchanged); `cost` is the row-level
+`costOf(...).usd` (null when unknown). `steps` counts every kind, so a CLI's own log line is transcript
+too.
 
 ### 5.3 Prompt-side tools
 

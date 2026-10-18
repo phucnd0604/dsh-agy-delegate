@@ -1,14 +1,19 @@
 /**
- * Unit checks for the one piece of real logic in the plugin: turning agy's
- * stream-json lines into the events and steps the widget renders. Fixtures are
- * verbatim lines captured from `agy --output-format stream-json` on this
+ * Unit checks for the one piece of real logic in the plugin: folding agy's
+ * stream-json lines into the normalized transcript from `lib/step.js`. Fixtures
+ * are verbatim lines captured from `agy --output-format stream-json` on this
  * machine, including the non-JSON denial line headless agy prints.
+ *
+ * These assert the Step union, not agy's raw rows: the whole point of #10 is
+ * that a second backend can emit the same shape and the rest of the plugin will
+ * not know the difference.
  */
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createParser, excerpt, findPermissionDenial, isAnswerStep, isPermissionDenial, permissionDenialMessage, summarizeSteps } from '../lib/parse.js';
+import { createParser, findPermissionDenial, isAnswerStep, isPermissionDenial, permissionDenialMessage } from '../lib/parse.js';
+import { costOf, excerpt, summarizeSteps, toolsOf } from '../lib/step.js';
 
 /**
  * Two real error payloads from this machine, one of each kind. The invalid-args
@@ -28,7 +33,7 @@ const INVALID_ARGS = {
     + 'The system cannot find the file specified.',
 };
 
-test('folds a plain answer run end to end', () => {
+test('folds a plain answer run into one normalized transcript', () => {
   const parser = createParser();
   const lines = [
     '{"event":"init","conversation_id":"d93dec18-fa0f-4f79-af12-11fa24d9be7c","init":{"cwd":"C:\\\\tmp","tools":["run_command","view_file"],"permission_mode":"request-review"}}',
@@ -38,70 +43,92 @@ test('folds a plain answer run end to end', () => {
     '{"event":"step_update","step_update":{"conversation_id":"d93dec18","step_index":1,"state":"DONE","step_type":"agent_response","text_delta":"\\n","duration_seconds":4.49,"usage":{"input_tokens":16923,"output_tokens":5,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":16928}}}',
     '{"event":"result","result":{"conversation_id":"d93dec18","status":"SUCCESS","response":"pong\\n","duration_seconds":4.55,"num_turns":1,"usage":{"input_tokens":16923,"output_tokens":5,"total_tokens":16928}}}',
   ];
-  const events = lines.flatMap((line) => parser.push(line));
+  const steps = lines.flatMap((line) => parser.push(line));
 
-  assert.equal(events[0].kind, 'init');
+  // The session step comes first: it is how a run becomes resumable.
+  assert.deepEqual(steps[0], { kind: 'session', id: 'd93dec18-fa0f-4f79-af12-11fa24d9be7c', at: steps[0].at });
+  assert.equal(steps[0].kind, 'session');
   assert.equal(parser.info().conversationId, 'd93dec18-fa0f-4f79-af12-11fa24d9be7c');
   assert.deepEqual(parser.info().tools, ['run_command', 'view_file']);
 
   const answer = parser.steps().find(isAnswerStep);
+  assert.equal(answer.kind, 'answer');
   assert.equal(answer.text, 'pong\n');
-  assert.equal(answer.state, 'DONE');
-  assert.equal(answer.deltas, 3);
-  assert.equal(answer.usage.total_tokens, 16928);
+
+  // Usage lives on a cost step; every kind carries `at`.
+  assert.deepEqual(costOf(parser.steps()).tokens, { input_tokens: 16923, output_tokens: 5, total_tokens: 16928 });
+  assert.equal(typeof answer.at, 'number');
 
   assert.equal(parser.result().status, 'SUCCESS');
   assert.equal(parser.result().response, 'pong\n');
-  assert.equal(events.at(-1).kind, 'result');
+  assert.equal(steps.at(-1).kind, 'cost');
 });
 
-test('captures a tool call and its permission error', () => {
+test('streams one tool call as a single updated step', () => {
   const parser = createParser();
   parser.push('{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"Get-ChildItem -Force"}}}}');
-  const active = parser.steps().at(-1);
-  assert.equal(active.toolName, 'run_command');
-  assert.equal(active.tool.parameters.CommandLine, 'Get-ChildItem -Force');
-  assert.equal(active.state, 'ACTIVE');
+  const [active] = parser.steps();
+  assert.equal(active.kind, 'tool');
+  assert.equal(active.name, 'run_command');
+  assert.equal(active.input.CommandLine, 'Get-ChildItem -Force');
+  assert.equal(active.error, undefined);
 
   parser.push('{"event":"step_update","step_update":{"step_index":2,"state":"ERROR","step_type":"tool","tool_name":"run_command","duration_seconds":1.49,"tool_info":{"name":"run_command","parameters":{"CommandLine":"Get-ChildItem -Force"},"error":{"type":"TOOL_ERROR","message":"permission check failed"}}}}');
-  const errored = parser.steps().at(-1);
-  assert.equal(errored.state, 'ERROR');
+  const [errored] = parser.steps();
+  assert.equal(errored, active, 'the update folds into the same step object');
+  assert.equal(errored.kind, 'tool');
+  assert.equal(errored.name, 'run_command');
   assert.equal(errored.error.type, 'TOOL_ERROR');
-  // One row per (step_index, step_type): the update folds into the same row.
-  assert.equal(parser.steps().filter((step) => step.toolName !== undefined).length, 1);
+  assert.equal(toolsOf(parser.steps()).length, 1, 'one step per tool call, not one per update');
 });
 
-test('keeps a non-JSON denial line as a log instead of dropping it', () => {
+test('an update that clears a tool error neither crashes nor duplicates the step', () => {
   const parser = createParser();
-  const events = parser.push("jetski: no output produced — a tool required the \"command\" permission that headless mode cannot prompt for, so it was auto-denied.");
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, 'log');
-  assert.equal(parser.logs().length, 1);
+  parser.push('{"event":"step_update","step_update":{"step_index":3,"state":"ACTIVE","step_type":"tool","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"path":"a"}}}}');
+  parser.push('{"event":"step_update","step_update":{"step_index":3,"state":"DONE","step_type":"tool","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"path":"a"},"error":null}}}');
+  const [step] = parser.steps();
+  assert.equal(parser.steps().length, 1);
+  assert.equal(step.name, 'view_file');
+  assert.equal(step.error, undefined, 'a null error does not become a stored error');
+  assert.equal(isPermissionDenial(step), false);
+});
+
+test('keeps a non-JSON denial line as a log step instead of dropping it', () => {
+  const parser = createParser();
+  const steps = parser.push("jetski: no output produced — a tool required the \"command\" permission that headless mode cannot prompt for, so it was auto-denied.");
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].kind, 'log');
+  assert.equal(steps[0].level, 'info');
   assert.match(parser.logs()[0], /auto-denied/);
   // Blank lines produce nothing at all.
   assert.deepEqual(parser.push('   '), []);
 });
 
-test('records an unknown event by name only', () => {
+test('reports an unknown event as a debug log step (drift alarm)', () => {
   const parser = createParser();
-  const events = parser.push('{"event":"some_new_thing","payload":{"huge":"blob"}}');
-  assert.equal(events[0].kind, 'raw');
-  assert.equal(events[0].event, 'some_new_thing');
-  assert.equal(events[0].payload, undefined);
+  const steps = parser.push('{"event":"some_new_thing","payload":{"huge":"blob"}}');
+  assert.equal(steps[0].kind, 'log');
+  assert.equal(steps[0].level, 'debug');
+  assert.match(steps[0].text, /unhandled event "some_new_thing"/);
+  assert.equal(steps[0].payload, undefined, 'payloads are not carried into the transcript');
 });
 
 test('a refused tool is told apart from an ordinary tool failure', () => {
-  assert.equal(isPermissionDenial({ toolName: 'run_command', error: DENIED_COMMAND }), true);
+  assert.equal(isPermissionDenial({ kind: 'tool', name: 'run_command', error: DENIED_COMMAND }), true);
   // The regression this guards: a missing-file error mentions "permissions" in
   // its preamble, and treating that as a denial would abort good runs.
-  assert.equal(isPermissionDenial({ toolName: 'view_file', error: INVALID_ARGS }), false);
-  assert.equal(isPermissionDenial({ toolName: 'view_file' }), false);
+  assert.equal(isPermissionDenial({ kind: 'tool', name: 'view_file', error: INVALID_ARGS }), false);
+  assert.equal(isPermissionDenial({ kind: 'tool', name: 'view_file' }), false);
+  assert.equal(isPermissionDenial({ kind: 'answer', text: 'hi' }), false);
   assert.equal(isPermissionDenial(null), false);
 
-  const denied = findPermissionDenial([{ toolName: 'view_file', error: INVALID_ARGS }, { toolName: 'run_command', error: DENIED_COMMAND }]);
+  const denied = findPermissionDenial([
+    { kind: 'tool', name: 'view_file', error: INVALID_ARGS },
+    { kind: 'tool', name: 'run_command', error: DENIED_COMMAND },
+  ]);
   assert.equal(denied.tool, 'run_command');
   assert.equal(denied.source, 'step');
-  assert.equal(findPermissionDenial([{ toolName: 'view_file', error: INVALID_ARGS }]), null);
+  assert.equal(findPermissionDenial([{ kind: 'tool', name: 'view_file', error: INVALID_ARGS }]), null);
 
   // The other way agy reports it: a bare line when the denial leaves no output.
   const fromLog = findPermissionDenial([], ['jetski: no output produced — a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.']);
@@ -122,4 +149,13 @@ test('summarizes a run and trims excerpts', () => {
 
   assert.equal(excerpt('  a\n\n b ', 20), 'a b');
   assert.equal(excerpt('x'.repeat(30), 10), 'xxxxxxxxx…');
+});
+
+test('a reasoning step streams apart from the answer', () => {
+  const parser = createParser();
+  parser.push('{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"agent_thinking","text_delta":"let me think"}}');
+  parser.push('{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"agent_response","text_delta":"done"}}');
+  const kinds = parser.steps().map((step) => step.kind);
+  assert.deepEqual(kinds, ['thinking', 'answer']);
+  assert.equal(parser.steps()[0].text, 'let me think');
 });
