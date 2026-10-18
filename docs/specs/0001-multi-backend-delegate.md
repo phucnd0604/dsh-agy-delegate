@@ -1,0 +1,222 @@
+# 0001 — Many backends behind one delegate registry
+
+**Status:** proposed (for review)
+**Supersedes:** the one-CLI shape described in `README.md` today
+**Decided by:** grilling session on 2 backends → N backends; every decision below was put to the user and accepted.
+
+## 1. Problem
+
+The plugin delegates a brief to exactly one CLI (`agy`). Its host half, its routes, its widget and its
+bundled skill all assume Antigravity: `agy_delegate`/`agy_task` tools, `/api/agy-delegate/*` routes,
+`agy`-specific spawn and NDJSON parsing, one bundled skill. The user wants a second CLI (`opencode`) now
+and more CLIs later, without touching the core each time.
+
+## 2. Goals
+
+- Add `opencode` as a second backend with the same loop: brief → implementer → review → land.
+- Make "add a CLI" a one-file change: a new adapter module plus a bundled skill directory.
+- Keep one task registry, one widget, one set of routes, one prompt-side tool vocabulary.
+- Ship both bundled skills so no separate skill install is needed.
+- Keep the current behaviour for `agy` byte-for-byte where the user can see it (transcript, status, widget).
+
+## 3. Non-goals
+
+- No auto-selection of a backend or of a model on the user's behalf (cost is the user's decision).
+- No per-backend widgets, routes, or npm packages.
+- No worktree management, no auto-commit: the orchestrator commits (unchanged).
+- No support for CLIs that cannot run headless.
+
+## 4. Domain vocabulary
+
+Terms live in [../GLOSSARY.md](../GLOSSARY.md): **backend**, **backend adapter**, **brief**, **dispatch**,
+**implementer**, **orchestrator**, **step**, **task**, **transcript**, **widget**, **capability**.
+
+## 5. Architecture
+
+### 5.1 Adapter seam
+
+Each backend is one module `lib/backends/<id>.js` exporting a plain descriptor (data + pure functions,
+no class, no `this`):
+
+```js
+export const descriptor = {
+  id: 'opencode',                 // tool enum value, route field, config key
+  label: 'OpenCode CLI',          // widget badge and probe display name
+  skill: {                        // the bundled skill that documents this backend's loop
+    name: 'open-code-subagent',
+    dir: bundledSkillDir('open-code-subagent'),
+    upstream: 'https://github.com/amElnagdy/delegate-skills (MIT)',
+  },
+  capabilities: {
+    modelRequired: true,          // refuse a dispatch that names no model
+    modelList: true,              // adapter can enumerate models for suggestions
+    readOnly: 'plan-agent',       // how "look but do not edit" is expressed
+    resume: ['resumeLast', 'session'],
+    auto: true,                   // has an auto-approve dial
+  },
+  defaults: { auto: true },
+  optionsSchema: { /* JSON Schema for the per-backend "options" bag */ },
+
+  probe({ bin }) { /* -> { found, version, extra? } , never throws */ },
+  listModels({ bin }) { /* -> string[] | null , never throws */ },
+  buildArgv(task) { /* -> { argv, stdin? , env? } */ },
+  parseEvent(line, task) { /* -> Step | null , never throws on garbage */ },
+  describeModel(model) { /* -> short label for the widget row, optional */ },
+};
+```
+
+The core (`lib/runner.js`, `lib/index.js`, `lib/client.js`) knows only this contract. It never imports a
+backend module directly: `lib/backends/registry.js` collects the installed descriptors and hands them to
+the core. Adding CLI number three is `lib/backends/<id>.js` + `skills/<skill-name>/`, nothing else.
+
+### 5.2 Normalized transcript
+
+Every adapter parses its own event stream and emits the same `Step` shape, so the widget and
+`renderTask` stay backend-agnostic:
+
+```js
+{ kind: 'thinking', text, at }
+{ kind: 'answer',   text, at }
+{ kind: 'tool',     name, input?, error?, at }
+{ kind: 'session',  id, at }        // conversation id, enables resume
+{ kind: 'cost',     usd, tokens?, at }
+{ kind: 'log',      level, text, at }
+```
+
+A task row is `{ id, backend, status, startedAt, endedAt, model, cd, toolCalls, steps, answer, error, cost }`.
+`status` is one of `running | done | failed | timeout | killed` (unchanged).
+
+### 5.3 Prompt-side tools
+
+Two tools, regardless of how many backends exist:
+
+- `delegate { backend, brief, cd?, model?, readOnly?, background?, waitSeconds?, options? }` — `backend` is an
+  enum generated from the installed adapters; `options` is the per-backend bag validated against that
+  adapter's `optionsSchema` (agy: `effort`, `project`, `conversation`, `sandbox`, `addDirs`,
+  `printTimeout`, `newProject`, `skipPermissions`; opencode: `agent`, `variant`, `auto`, `session`, `pure`).
+- `delegate_task { action: list | status | detail | wait | kill | dismiss, id?, waitSeconds? }` — task ids are
+  unique across backends, so one control surface suffices.
+
+Refusal rules (all return `{ ok: false, message }` without dispatching): empty brief; unknown backend;
+unknown key in `options`; `model` missing on a backend whose `capabilities.modelRequired` is true (the message
+lists free models first, then the rest, capped at 10, from a live `listModels()` call); `readOnly` combined
+with an explicit full-access request; dispatch past the concurrency ceiling.
+
+### 5.4 Routes and probe
+
+Route family `/api/delegate/*`: `probe`, `tasks`, `task`, `kill`, `dismiss` (loopback-only, unchanged guard).
+
+`probe` reports observed health, not configuration:
+
+```json
+{ "ok": true, "enabled": true, "running": 1,
+  "backends": [{ "id": "agy", "label": "...", "found": true, "version": "1.0.x", "models": null },
+               { "id": "opencode", "label": "...", "found": true, "version": "2.0.32", "models": ["opencode/beam-free", "..."] }],
+  "skills": [{ "name": "agy-sub-agent", "registered": true, "reason": null },
+             { "name": "open-code-subagent", "registered": true, "reason": null }] }
+```
+
+### 5.5 Configuration
+
+```js
+{
+  enabled: true,
+  maxConcurrent: 4,                       // shared across backends: it is machine load, not a CLI limit
+  backends: {
+    agy:      { path: 'agy', printTimeout: '30m', skipPermissions: true, projectsDir: undefined, reuseProjects: undefined },
+    opencode: { path: 'opencode', auto: true, defaultModel: undefined },
+  },
+}
+```
+
+Backward compatibility: the old flat keys (`agyPath`, `printTimeout`, `skipPermissions`, `projectsDir`,
+`reuseProjects`) are still read and mapped into `backends.agy`. `defaultModel` is never inferred — a model is
+only used as a default if the user wrote it down.
+
+### 5.6 Bundled skills
+
+One skill per adapter, one directory per skill, both registered on mount even when the CLI is absent
+(the skill is documentation; `probe` is where "not installed" is reported):
+
+| backend | skill directory | skill name |
+| --- | --- | --- |
+| agy | `skills/agy-sub-agent/` (renamed from `skills/agy-delegate/`) | `agy-sub-agent` |
+| opencode | `skills/open-code-subagent/` (copied verbatim from the upstream `opencode-delegate` skill) | `open-code-subagent` |
+
+Each `SKILL.md` stays byte-identical to its upstream copy, an `UPSTREAM.md` records the source, and the
+"In this install" appendix is appended at registration time (the current pattern in `lib/skill.js`), so an
+upstream refresh is a plain file copy.
+
+### 5.7 Widget
+
+One floating widget, one row per task, newest first, a backend badge (`agy` / `opencode`) on each row, and a
+header count (`2 running (1 agy, 1 opencode)`). No per-backend filter chips — the widget stays small.
+
+## 6. Backend: agy (no behaviour change)
+
+Wraps today's code: NDJSON on stdout, `--add-dir` workspace, `--print-timeout`, `--dangerously-skip-permissions`
+by default, `readOnly` = sandbox, project reuse keyed by `cd`, `resumeLast` / `conversation` passthrough.
+
+## 7. Backend: opencode (new)
+
+- **Spawn:** `opencode run --format json [--session <id> | --continue] --agent <build|plan> --model <provider/model>[#variant] [--auto] [--pure]`
+  with the brief piped on **stdin** (no argv quoting issues for multi-line, XML-tagged briefs); working
+  directory = `cd`; events are JSON lines on stdout.
+- **Model policy:** `modelRequired: true`. Missing model → refusal listing `opencode models` filtered to
+  `/-free$/` first (11 today: `opencode/beam-free`, `opencode/deepseek-v4.1-flash-free`,
+  `opencode/glm-5.3-flash-free`, `opencode/nemotron-3.5-lightning-free`, …), then the `opencode-go/*`
+  subscription models; never auto-picked. `config.backends.opencode.defaultModel` is an explicit opt-in.
+- **Read-only:** `readOnly` → `--agent plan` and **never** `--auto` (auto-approving a plan agent's ask-gated
+  edit permissions would defeat "read-only", the exact reason the upstream relay does the same).
+- **Auto:** `--auto` by default on a build run (headless cannot answer a prompt); `options.auto: false`
+  honours the agent's own permission config.
+- **Resume:** session id is captured from the event stream into a `session` step; `options.resumeLast` →
+  `--continue`, `options.session` → `--session <id>`.
+- **Cost:** the `cost` step is populated when the stream reports it.
+- **Windows:** the CLI on PATH is a `.ps1`/`.cmd` shim next to `opencode.exe`; spawn the resolved executable
+  without a shell, and cover it with a test.
+
+## 8. Documentation deliverables
+
+- `README.md`: a backend table, the two tool names, the `/api/delegate/*` routes, and the config block.
+- `docs/adding-a-backend.md`: the descriptor contract, a checklist (adapter + skill + fixture + contract test),
+  and the "what the core guarantees" list.
+- `docs/adr/0001-many-backends-behind-adapters.md`, `docs/adr/0002-one-delegate-tool-with-an-options-bag.md`.
+- `lib/GLOSSARY.md` updated with the terms this spec settles.
+
+## 9. Testing
+
+- `test/backends/contract.test.mjs`: every installed adapter must satisfy the contract — `buildArgv` returns an
+  argv array with the brief on stdin or in one argv slot, `parseEvent` never throws on garbage/empty/JSON-error
+  lines, `probe` and `listModels` never throw when the binary is missing, `optionsSchema` rejects unknown keys.
+- Fixture-driven parser tests: recorded agy NDJSON and recorded opencode event JSON → expected steps.
+- Config compatibility test: old flat keys still map to `backends.agy`.
+- Widget render test: two backends side by side, badge and count.
+- `test/tools.test.mjs`: refusal messages for unknown backend, missing model, unknown option, ceiling.
+
+## 10. Migration and breaking changes
+
+| today | after |
+| --- | --- |
+| package `dsh-agy-delegate` / id `agy-delegate` | `dsh-delegate` / `delegate` |
+| routes `/api/agy-delegate/*` | `/api/delegate/*` |
+| tools `agy_delegate`, `agy_task` | `delegate`, `delegate_task` |
+| skill `agy-delegate` | skill `agy-sub-agent` (+ new `open-code-subagent`) |
+| config `agyPath`, `printTimeout`, `skipPermissions`, … | `backends.agy.*` (old keys still honoured) |
+| GitHub repo `phucnd0604/dsh-agy-delegate` | `phucnd0604/dsh-delegate` (already renamed) |
+
+Version 0.1.0 → 0.2.0. No compatibility shims for the old tool names (single user, 0.1.0); the old flat config
+keys are the one exception, kept because a live install may be running with them.
+
+## 11. Risks
+
+- **opencode event schema drift** (2.x folds `--variant` into the model value, 1.x does not): pin behaviour by
+  capability detection from `--version`, and keep the parser tolerant of unknown event types.
+- **agy NDJSON format churn**: parser tolerance plus fixtures recorded today.
+- **Windows spawn of npm shims**: resolved by spawning the executable path, not the shim, and tested.
+- **Install churn from the rename**: an existing profile shows the new package as a new plugin; documented in
+  the README upgrade note.
+
+## 12. Tickets
+
+The map issue mirrors this spec; children are one brief each (see the map for the live list and blocking edges).
